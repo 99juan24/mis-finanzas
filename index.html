@@ -71,7 +71,7 @@
     }
     #reminder-banner.show { display: block; }
 
-    nav {
+    nav.top-nav {
       display: flex;
       gap: 0.25rem;
       padding: 1rem calc(2rem + env(safe-area-inset-right)) 0 calc(2rem + env(safe-area-inset-left));
@@ -302,38 +302,133 @@
     }
     .section-header h2 { font-size: 1.1rem; }
 
+    /* ── Tablet (601–900px) ───────────────────────────── */
+    @media (max-width: 900px) {
+      .summary-grid { grid-template-columns: 1fr 1fr; }
+      .form-row { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* ── Móvil (≤600px) ───────────────────────────────── */
     @media (max-width: 600px) {
       .desktop-only { display: none !important; }
-      main {
-        padding: 0.75rem;
-        /* Suficiente espacio para el bottom nav + barra de inicio de iPhone */
-        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
-        padding-left: calc(0.75rem + env(safe-area-inset-left));
-        padding-right: calc(0.75rem + env(safe-area-inset-right));
-      }
-      /* El header en móvil ya hereda los safe-area del CSS global,
-         solo ajustamos el padding reducido */
+
+      /* Body sin scroll horizontal */
+      body { overflow-x: hidden; }
+
+      /* Header compacto */
       header {
         padding-top: calc(0.75rem + env(safe-area-inset-top));
         padding-bottom: 0.75rem;
-        padding-left: calc(1rem + env(safe-area-inset-left));
-        padding-right: calc(1rem + env(safe-area-inset-right));
+        padding-left: calc(0.875rem + env(safe-area-inset-left));
+        padding-right: calc(0.875rem + env(safe-area-inset-right));
+        gap: 0.5rem;
       }
-      header h1 { font-size: 1.1rem; }
-      nav { display: none; }
-      .card-value { font-size: 1.4rem; }
-      .summary-grid { grid-template-columns: 1fr 1fr; gap: 0.6rem; }
-      .form-card { padding: 1rem; }
-      .form-row { grid-template-columns: 1fr; }
+      header h1 { font-size: 1rem; white-space: nowrap; }
+      #notif-btn { font-size: 0.75rem; padding: 0.4rem 0.6rem; white-space: nowrap; }
+
+      /* Nav de pestañas oculta — usamos bottom nav */
+      nav.top-nav { display: none; }
+
+      /* Contenido principal */
+      main {
+        padding: 0.875rem;
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+        padding-left: calc(0.875rem + env(safe-area-inset-left));
+        padding-right: calc(0.875rem + env(safe-area-inset-right));
+        /* Evitar overflow horizontal */
+        overflow-x: hidden;
+        width: 100%;
+      }
+
+      /* Cards de resumen: 2 columnas */
+      .summary-grid {
+        grid-template-columns: 1fr 1fr;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+      }
+      .card { padding: 0.875rem 1rem; }
+      .card-value { font-size: 1.3rem; }
+      .card-label { font-size: 0.7rem; }
+
+      /* Sección de dos columnas en resumen → 1 columna */
+      #page-resumen > div:nth-child(2) {
+        grid-template-columns: 1fr !important;
+        gap: 0.75rem;
+      }
+
+      /* Formularios */
+      .form-card { padding: 0.875rem; margin-bottom: 1rem; }
+      .form-row { grid-template-columns: 1fr; gap: 0.6rem; }
+
+      /* Inputs y selects más grandes para touch */
+      input, select, textarea {
+        font-size: 1rem;      /* evita zoom automático en iOS */
+        padding: 0.65rem 0.75rem;
+        min-height: 44px;     /* área táctil mínima Apple */
+      }
+
+      /* Botones táctiles */
+      .btn { min-height: 44px; }
+      .btn-sm { min-height: 36px; font-size: 0.78rem; padding: 0.4rem 0.7rem; }
+
+      /* Filtros apilados */
+      .filters { flex-direction: column; align-items: stretch; gap: 0.5rem; }
+      .filters input, .filters select { max-width: 100%; width: 100%; }
+      #mov-total-label { margin-left: 0 !important; }
+
+      /* ── Tabla → tarjetas en móvil ── */
+      .table-wrapper { overflow-x: visible; }
+      table, thead, tbody, tr, th, td { display: block; width: 100%; }
+      thead { display: none; }           /* ocultamos cabecera */
+      tbody tr {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        margin-bottom: 0.6rem;
+        padding: 0.75rem;
+        position: relative;
+      }
+      tbody tr:last-child { border-bottom: 1px solid var(--border); margin-bottom: 0; }
+      td {
+        padding: 0.2rem 0;
+        border: none;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        font-size: 0.875rem;
+        gap: 0.5rem;
+      }
+      /* Etiqueta antes de cada celda */
+      td::before {
+        content: attr(data-label);
+        color: var(--muted);
+        font-size: 0.72rem;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        flex-shrink: 0;
+      }
+      /* Celda de acciones: sin etiqueta, centrada */
+      td.td-actions {
+        justify-content: flex-end;
+        margin-top: 0.4rem;
+        padding-top: 0.5rem;
+        border-top: 1px solid var(--border);
+      }
+      td.td-actions::before { display: none; }
+
+      /* Deudas: 1 columna */
       .debt-grid { grid-template-columns: 1fr; }
-      .filters { gap: 0.5rem; }
-      .filters input, .filters select { max-width: 100%; }
-      table { font-size: 0.8rem; }
-      td, thead th { padding: 0.6rem 0.5rem; }
-      /* Ocultar columna notas en móvil */
-      table th:nth-child(4), table td:nth-child(4) { display: none; }
-      /* Resumen: ocultar top categorias en grid 2col */
-      #page-resumen > div:nth-child(2) { grid-template-columns: 1fr; }
+      .debt-card-actions { flex-wrap: wrap; gap: 0.4rem; }
+      .debt-card-amount { font-size: 1.2rem; }
+
+      /* Modales full-width en móvil */
+      .modal {
+        width: 95%;
+        padding: 1.25rem;
+        margin: 0 0.5rem;
+        max-height: 85vh;
+      }
+      .modal-footer { flex-direction: row; }
     }
 
     /* Bottom nav para móvil */
@@ -386,7 +481,7 @@
 
 <div id="reminder-banner"></div>
 
-<nav>
+<nav class="top-nav">
   <button class="active" onclick="showPage('resumen')">Resumen</button>
   <button onclick="showPage('movimientos')">Movimientos</button>
   <button onclick="showPage('deudas')">Deudas</button>
@@ -878,14 +973,14 @@ function deleteMovimiento(id) {
 function movRow(m, withNotas = false) {
   const isIngreso = m.tipo === 'ingreso';
   return `<tr>
-    <td>${formatDate(m.fecha)}</td>
-    <td>${m.desc}</td>
-    <td><span class="badge ${isIngreso ? 'badge-green' : 'badge-red'}">${m.cat}</span></td>
-    ${withNotas ? `<td style="color:var(--muted);font-size:0.82rem;">${m.notas || '-'}</td>` : ''}
-    <td style="font-weight:600; color:${isIngreso ? 'var(--green)' : 'var(--red)'}">
+    <td data-label="Fecha">${formatDate(m.fecha)}</td>
+    <td data-label="Descripción">${m.desc}</td>
+    <td data-label="Categoría"><span class="badge ${isIngreso ? 'badge-green' : 'badge-red'}">${m.cat}</span></td>
+    ${withNotas ? `<td data-label="Notas" style="color:var(--muted);font-size:0.82rem;">${m.notas || '-'}</td>` : ''}
+    <td data-label="Monto" style="font-weight:600; color:${isIngreso ? 'var(--green)' : 'var(--red)'}">
       ${isIngreso ? '+' : '-'}${fmt(m.monto)}
     </td>
-    <td><button class="btn btn-ghost btn-sm" onclick="deleteMovimiento('${m.id}')">🗑</button></td>
+    <td class="td-actions"><button class="btn btn-ghost btn-sm" onclick="deleteMovimiento('${m.id}')">🗑 Eliminar</button></td>
   </tr>`;
 }
 
