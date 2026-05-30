@@ -32,12 +32,18 @@
       background: var(--bg);
       color: var(--text);
       min-height: 100vh;
+      /* Fondo del header se extiende detrás del Dynamic Island */
+      background-attachment: fixed;
     }
 
     header {
       background: var(--surface);
       border-bottom: 1px solid var(--border);
-      padding: 1rem 2rem;
+      /* Safe area: Dynamic Island arriba, bordes laterales */
+      padding-top: calc(1rem + env(safe-area-inset-top));
+      padding-bottom: 1rem;
+      padding-left: calc(2rem + env(safe-area-inset-left));
+      padding-right: calc(2rem + env(safe-area-inset-right));
       display: flex;
       align-items: center;
       justify-content: space-between;
@@ -59,7 +65,7 @@
       display: none;
       background: linear-gradient(90deg, #7c3aed22, #ef444422);
       border: 1px solid #ef444466;
-      padding: 0.75rem 2rem;
+      padding: 0.75rem calc(2rem + env(safe-area-inset-right)) 0.75rem calc(2rem + env(safe-area-inset-left));
       font-size: 0.9rem;
       color: #fca5a5;
     }
@@ -68,7 +74,7 @@
     nav {
       display: flex;
       gap: 0.25rem;
-      padding: 1rem 2rem 0;
+      padding: 1rem calc(2rem + env(safe-area-inset-right)) 0 calc(2rem + env(safe-area-inset-left));
       border-bottom: 1px solid var(--border);
       overflow-x: auto;
     }
@@ -298,8 +304,21 @@
 
     @media (max-width: 600px) {
       .desktop-only { display: none !important; }
-      main { padding: 0.75rem; padding-bottom: 5rem; }
-      header { padding: 0.75rem 1rem; }
+      main {
+        padding: 0.75rem;
+        /* Suficiente espacio para el bottom nav + barra de inicio de iPhone */
+        padding-bottom: calc(5.5rem + env(safe-area-inset-bottom));
+        padding-left: calc(0.75rem + env(safe-area-inset-left));
+        padding-right: calc(0.75rem + env(safe-area-inset-right));
+      }
+      /* El header en móvil ya hereda los safe-area del CSS global,
+         solo ajustamos el padding reducido */
+      header {
+        padding-top: calc(0.75rem + env(safe-area-inset-top));
+        padding-bottom: 0.75rem;
+        padding-left: calc(1rem + env(safe-area-inset-left));
+        padding-right: calc(1rem + env(safe-area-inset-right));
+      }
       header h1 { font-size: 1.1rem; }
       nav { display: none; }
       .card-value { font-size: 1.4rem; }
@@ -324,8 +343,11 @@
       bottom: 0; left: 0; right: 0;
       background: var(--surface);
       border-top: 1px solid var(--border);
-      padding: 0.5rem;
-      padding-bottom: calc(0.5rem + env(safe-area-inset-bottom));
+      /* Safe area: barra de inicio abajo + bordes laterales */
+      padding-top: 0.5rem;
+      padding-bottom: calc(0.6rem + env(safe-area-inset-bottom));
+      padding-left: env(safe-area-inset-left);
+      padding-right: env(safe-area-inset-right);
       z-index: 100;
       justify-content: space-around;
     }
