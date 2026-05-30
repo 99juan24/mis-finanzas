@@ -524,6 +524,18 @@
       <p id="auth-success" style="color:var(--green);font-size:0.82rem;margin-top:0.75rem;text-align:center;display:none;"></p>
     </div>
 
+    <!-- Face ID -->
+    <div id="faceid-btn-wrap" style="display:none;margin-top:1rem;">
+      <button onclick="loginWithFaceID()" style="
+        width:100%;background:var(--surface);border:1px solid var(--border);
+        border-radius:var(--radius);padding:0.9rem;font-size:1rem;font-weight:600;
+        color:var(--text);cursor:pointer;display:flex;align-items:center;
+        justify-content:center;gap:0.6rem;min-height:52px;
+      ">
+        <span style="font-size:1.5rem;">🔒</span> Entrar con Face ID
+      </button>
+    </div>
+
     <!-- Olvidé contraseña -->
     <div id="forgot-link" style="text-align:center;margin-top:1rem;">
       <button onclick="forgotPassword()" style="
@@ -752,6 +764,18 @@
       <p id="ntfy-status" style="margin-top:0.75rem;font-size:0.85rem;color:var(--muted);"></p>
     </div>
 
+    <div class="form-card" id="faceid-settings-card">
+      <h3>🔒 Face ID / Huella</h3>
+      <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+        Entra a la app con Face ID sin escribir tu contraseña. Solo necesitas configurarlo una vez.
+      </p>
+      <div id="faceid-status-msg" style="font-size:0.875rem;margin-bottom:1rem;"></div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button class="btn btn-primary" id="faceid-enable-btn" onclick="enableFaceID()">Activar Face ID</button>
+        <button class="btn btn-red"   id="faceid-remove-btn" onclick="disableFaceID()" style="display:none;">Desactivar</button>
+      </div>
+    </div>
+
     <div class="form-card">
       <h3>🗂 Datos</h3>
       <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;">
@@ -922,6 +946,58 @@ const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
 
 let currentUser = null;
 
+// ── Face ID / WebAuthn ───────────────────────────────────────────
+const FACEID_KEY = 'fin_faceid_cred';
+const FACEID_USER = 'fin_faceid_user';
+
+async function faceIDAvailable() {
+  return !!(window.PublicKeyCredential &&
+    await PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable());
+}
+
+async function enrollFaceID(userId, email) {
+  try {
+    const challenge  = crypto.getRandomValues(new Uint8Array(32));
+    const userIdBuf  = new TextEncoder().encode(userId.replace(/-/g,'').slice(0,32).padEnd(32,'0'));
+    const credential = await navigator.credentials.create({ publicKey: {
+      challenge,
+      rp: { name: 'Mis Finanzas', id: location.hostname },
+      user: { id: userIdBuf, name: email, displayName: email },
+      pubKeyCredParams: [{ type:'public-key', alg:-7 }, { type:'public-key', alg:-257 }],
+      authenticatorSelection: { authenticatorAttachment:'platform', userVerification:'required', residentKey:'preferred' },
+      timeout: 60000
+    }});
+    const credId = btoa(String.fromCharCode(...new Uint8Array(credential.rawId)));
+    localStorage.setItem(FACEID_KEY,  credId);
+    localStorage.setItem(FACEID_USER, JSON.stringify({ email, userId }));
+    return true;
+  } catch(e) { return false; }
+}
+
+async function authWithFaceID() {
+  const credIdB64 = localStorage.getItem(FACEID_KEY);
+  if (!credIdB64) return false;
+  try {
+    const credId = Uint8Array.from(atob(credIdB64), c => c.charCodeAt(0));
+    await navigator.credentials.get({ publicKey: {
+      challenge: crypto.getRandomValues(new Uint8Array(32)),
+      allowCredentials: [{ type:'public-key', id: credId, transports:['internal'] }],
+      userVerification: 'required',
+      timeout: 60000
+    }});
+    return true;
+  } catch(e) { return false; }
+}
+
+function hasFaceIDEnrolled() {
+  return !!localStorage.getItem(FACEID_KEY);
+}
+
+function removeFaceID() {
+  localStorage.removeItem(FACEID_KEY);
+  localStorage.removeItem(FACEID_USER);
+}
+
 // ── Auth UI ──────────────────────────────────────────────────────
 function showAuthScreen(show) {
   const el = document.getElementById('auth-screen');
@@ -1021,6 +1097,73 @@ async function logOut() {
   showToast('Sesión cerrada');
 }
 
+// ── Funciones Face ID UI ─────────────────────────────────────────
+async function loginWithFaceID() {
+  const wrap = document.getElementById('faceid-btn-wrap');
+  const origText = wrap.querySelector('button').innerHTML;
+  wrap.querySelector('button').innerHTML = '<span style="font-size:1.5rem;">⏳</span> Verificando...';
+
+  const ok = await authWithFaceID();
+  if (ok) {
+    // Restaurar sesión de Supabase desde localStorage (ya está guardada)
+    const { data: { session } } = await sb.auth.getSession();
+    if (session) {
+      // onAuthStateChange se encarga del resto
+      return;
+    }
+    // Si la sesión expiró, pedir contraseña
+    showToast('Sesión expirada, inicia sesión de nuevo');
+  } else {
+    showToast('Face ID cancelado o no reconocido');
+  }
+  wrap.querySelector('button').innerHTML = origText;
+}
+
+async function enableFaceID() {
+  if (!currentUser) return iosAlert('Primero inicia sesión');
+  const available = await faceIDAvailable();
+  if (!available) return iosAlert('Tu dispositivo no soporta Face ID / biometría web');
+
+  document.getElementById('faceid-enable-btn').textContent = 'Activando...';
+  const ok = await enrollFaceID(currentUser.id, currentUser.email);
+  if (ok) {
+    showToast('✅ Face ID activado');
+    updateFaceIDSettings();
+  } else {
+    iosAlert('No se pudo activar Face ID. Asegúrate de permitirlo en la pantalla que aparece.');
+  }
+  document.getElementById('faceid-enable-btn').textContent = 'Activar Face ID';
+}
+
+function disableFaceID() {
+  iosConfirm('¿Desactivar Face ID? Tendrás que usar tu contraseña para entrar.', () => {
+    removeFaceID();
+    updateFaceIDSettings();
+    showToast('Face ID desactivado');
+  }, 'Desactivar');
+}
+
+function updateFaceIDSettings() {
+  const enrolled = hasFaceIDEnrolled();
+  const enableBtn = document.getElementById('faceid-enable-btn');
+  const removeBtn = document.getElementById('faceid-remove-btn');
+  const statusMsg = document.getElementById('faceid-status-msg');
+  if (!enableBtn) return;
+  enableBtn.style.display = enrolled ? 'none' : '';
+  removeBtn.style.display = enrolled ? ''     : 'none';
+  statusMsg.innerHTML = enrolled
+    ? '<span style="color:var(--green);">✅ Face ID activado en este dispositivo</span>'
+    : '<span style="color:var(--muted);">Face ID no está activado.</span>';
+}
+
+async function checkFaceIDOnLoad() {
+  // Mostrar botón de Face ID en login si está enrollado
+  const enrolled = hasFaceIDEnrolled();
+  const available = await faceIDAvailable().catch(() => false);
+  const wrap = document.getElementById('faceid-btn-wrap');
+  if (wrap) wrap.style.display = (enrolled && available) ? '' : 'none';
+}
+
 // ── Cargar datos desde Supabase ──────────────────────────────────
 async function loadFromSupabase() {
   try {
@@ -1046,6 +1189,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     const nombre = session.user.user_metadata?.nombre || session.user.email;
     document.getElementById('header-user').textContent = nombre;
     showAuthScreen(false);
+    updateFaceIDSettings();
     await loadFromSupabase();
     renderResumen();
     checkReminders();
@@ -1053,6 +1197,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     if (getNtfyTopic()) setTimeout(sendNtfyReminders, 2000);
   } else {
     showAuthScreen(true);
+    checkFaceIDOnLoad();
   }
 });
 
