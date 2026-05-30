@@ -9,6 +9,7 @@
   <meta name="apple-mobile-web-app-title" content="Mis Finanzas" />
   <link rel="manifest" href="manifest.json" />
   <title>Mis Finanzas</title>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -469,13 +470,78 @@
 </head>
 <body>
 
+<!-- ===== PANTALLA AUTH ===== -->
+<div id="auth-screen" style="
+  display:none; position:fixed; inset:0; background:var(--bg);
+  z-index:999; align-items:center; justify-content:center;
+  padding: calc(1rem + env(safe-area-inset-top)) 1rem calc(1rem + env(safe-area-inset-bottom));
+">
+  <div style="width:100%;max-width:400px;">
+    <div style="text-align:center;margin-bottom:2rem;">
+      <div style="font-size:3rem;">💰</div>
+      <h1 style="font-size:1.6rem;font-weight:700;color:var(--accent2);margin-top:0.5rem;">Mis Finanzas</h1>
+      <p style="color:var(--muted);font-size:0.875rem;margin-top:0.25rem;">Tu dinero, bajo control</p>
+    </div>
+
+    <!-- Tabs login/registro -->
+    <div style="display:flex;background:var(--surface2);border-radius:10px;padding:4px;margin-bottom:1.5rem;">
+      <button id="tab-login" onclick="switchAuthTab('login')" style="
+        flex:1;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;font-weight:600;
+        cursor:pointer;transition:all 0.2s;background:var(--accent);color:#fff;
+      ">Iniciar sesión</button>
+      <button id="tab-register" onclick="switchAuthTab('register')" style="
+        flex:1;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;font-weight:600;
+        cursor:pointer;transition:all 0.2s;background:transparent;color:var(--muted);
+      ">Registrarse</button>
+    </div>
+
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:1.5rem;">
+      <!-- Nombre (solo registro) -->
+      <div id="auth-name-group" class="form-group" style="display:none;margin-bottom:1rem;">
+        <label>Nombre</label>
+        <input type="text" id="auth-name" placeholder="Tu nombre" autocomplete="name" />
+      </div>
+      <div class="form-group" style="margin-bottom:1rem;">
+        <label>Email</label>
+        <input type="email" id="auth-email" placeholder="tu@email.com" autocomplete="email" />
+      </div>
+      <div class="form-group" style="margin-bottom:1.25rem;">
+        <label>Contraseña</label>
+        <div style="position:relative;">
+          <input type="password" id="auth-pass" placeholder="••••••••" autocomplete="current-password"
+            style="padding-right:2.5rem;" onkeydown="if(event.key==='Enter')submitAuth()" />
+          <button onclick="togglePassVis()" style="
+            position:absolute;right:0.6rem;top:50%;transform:translateY(-50%);
+            background:none;border:none;cursor:pointer;color:var(--muted);font-size:1rem;padding:0.25rem;
+          " id="pass-eye">👁</button>
+        </div>
+      </div>
+      <button class="btn btn-primary" onclick="submitAuth()"
+        style="width:100%;min-height:48px;font-size:1rem;" id="auth-submit-btn">
+        Iniciar sesión
+      </button>
+      <p id="auth-error" style="color:var(--red);font-size:0.82rem;margin-top:0.75rem;text-align:center;display:none;"></p>
+      <p id="auth-success" style="color:var(--green);font-size:0.82rem;margin-top:0.75rem;text-align:center;display:none;"></p>
+    </div>
+
+    <!-- Olvidé contraseña -->
+    <div id="forgot-link" style="text-align:center;margin-top:1rem;">
+      <button onclick="forgotPassword()" style="
+        background:none;border:none;color:var(--muted);font-size:0.82rem;cursor:pointer;text-decoration:underline;
+      ">¿Olvidaste tu contraseña?</button>
+    </div>
+  </div>
+</div>
+
 <header>
   <h1>💰 Mis Finanzas</h1>
-  <div style="display:flex;align-items:center;gap:0.75rem;">
+  <div style="display:flex;align-items:center;gap:0.5rem;">
     <span id="header-date" style="display:none" class="desktop-only"></span>
-    <button id="notif-btn" class="btn btn-primary btn-sm" onclick="requestNotifPermission()">
-      🔔 Activar notificaciones
+    <button id="notif-btn" class="btn btn-primary btn-sm desktop-only" onclick="requestNotifPermission()">
+      🔔 Notificaciones
     </button>
+    <span id="header-user" style="color:var(--muted);font-size:0.78rem;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" class="desktop-only"></span>
+    <button class="btn btn-ghost btn-sm" onclick="logOut()" id="logout-btn" style="display:none;">Salir</button>
   </div>
 </header>
 
@@ -849,22 +915,194 @@
 </div>
 
 <script>
+// ==================== SUPABASE ====================
+const SUPA_URL = 'https://mqkjtqocyrizxffguoqr.supabase.co';
+const SUPA_KEY = 'sb_publishable_X4ZV_C3HTqBO1rTqujJ52w_XyVJA4PD';
+const sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+let currentUser = null;
+
+// ── Auth UI ──────────────────────────────────────────────────────
+function showAuthScreen(show) {
+  const el = document.getElementById('auth-screen');
+  el.style.display = show ? 'flex' : 'none';
+  document.getElementById('logout-btn').style.display = show ? 'none' : '';
+}
+
+function switchAuthTab(tab) {
+  const isLogin = tab === 'login';
+  document.getElementById('tab-login').style.cssText    = isLogin
+    ? 'flex:1;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s;background:var(--accent);color:#fff;'
+    : 'flex:1;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s;background:transparent;color:var(--muted);';
+  document.getElementById('tab-register').style.cssText = isLogin
+    ? 'flex:1;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s;background:transparent;color:var(--muted);'
+    : 'flex:1;border:none;border-radius:8px;padding:0.6rem;font-size:0.9rem;font-weight:600;cursor:pointer;transition:all 0.2s;background:var(--accent);color:#fff;';
+  document.getElementById('auth-name-group').style.display = isLogin ? 'none' : '';
+  document.getElementById('auth-submit-btn').textContent = isLogin ? 'Iniciar sesión' : 'Crear cuenta';
+  document.getElementById('forgot-link').style.display   = isLogin ? '' : 'none';
+  document.getElementById('auth-pass').autocomplete = isLogin ? 'current-password' : 'new-password';
+  clearAuthMessages();
+  document.getElementById('auth-screen').dataset.tab = tab;
+}
+
+function clearAuthMessages() {
+  document.getElementById('auth-error').style.display   = 'none';
+  document.getElementById('auth-success').style.display = 'none';
+}
+
+function showAuthError(msg) {
+  const el = document.getElementById('auth-error');
+  el.textContent = msg; el.style.display = '';
+}
+function showAuthSuccess(msg) {
+  const el = document.getElementById('auth-success');
+  el.textContent = msg; el.style.display = '';
+}
+
+function togglePassVis() {
+  const inp = document.getElementById('auth-pass');
+  inp.type = inp.type === 'password' ? 'text' : 'password';
+}
+
+async function submitAuth() {
+  const tab   = document.getElementById('auth-screen').dataset.tab || 'login';
+  const email = document.getElementById('auth-email').value.trim();
+  const pass  = document.getElementById('auth-pass').value;
+  const name  = document.getElementById('auth-name').value.trim();
+  const btn   = document.getElementById('auth-submit-btn');
+
+  clearAuthMessages();
+  if (!email || !pass) return showAuthError('Ingresa email y contraseña');
+  if (tab === 'register' && pass.length < 6) return showAuthError('La contraseña debe tener al menos 6 caracteres');
+
+  btn.textContent = '...'; btn.disabled = true;
+
+  if (tab === 'login') {
+    const { error } = await sb.auth.signInWithPassword({ email, password: pass });
+    if (error) showAuthError(translateAuthError(error.message));
+  } else {
+    const { error } = await sb.auth.signUp({
+      email, password: pass,
+      options: { data: { nombre: name || email.split('@')[0] } }
+    });
+    if (error) showAuthError(translateAuthError(error.message));
+    else showAuthSuccess('✅ Cuenta creada. Ya puedes usar la app.');
+  }
+
+  btn.textContent = tab === 'login' ? 'Iniciar sesión' : 'Crear cuenta';
+  btn.disabled = false;
+}
+
+function translateAuthError(msg) {
+  if (msg.includes('Invalid login')) return 'Email o contraseña incorrectos';
+  if (msg.includes('already registered')) return 'Este email ya está registrado';
+  if (msg.includes('valid email')) return 'Ingresa un email válido';
+  if (msg.includes('Password should')) return 'La contraseña debe tener al menos 6 caracteres';
+  if (msg.includes('Network')) return 'Sin conexión a internet';
+  return msg;
+}
+
+async function forgotPassword() {
+  const email = document.getElementById('auth-email').value.trim();
+  if (!email) return showAuthError('Ingresa tu email primero');
+  clearAuthMessages();
+  const { error } = await sb.auth.resetPasswordForEmail(email);
+  if (error) showAuthError(translateAuthError(error.message));
+  else showAuthSuccess('📧 Te enviamos un link para restablecer tu contraseña');
+}
+
+async function logOut() {
+  await sb.auth.signOut();
+  data = { movimientos: [], deudas: [] };
+  localStorage.removeItem('fin_mov');
+  localStorage.removeItem('fin_deu');
+  currentUser = null;
+  showAuthScreen(true);
+  showToast('Sesión cerrada');
+}
+
+// ── Cargar datos desde Supabase ──────────────────────────────────
+async function loadFromSupabase() {
+  try {
+    const [{ data: movs }, { data: deus }] = await Promise.all([
+      sb.from('movimientos').select('*').order('fecha', { ascending: false }),
+      sb.from('deudas').select('*').order('created_at', { ascending: false })
+    ]);
+    data.movimientos = (movs || []).map(m => ({ ...m, desc: m.descripcion }));
+    data.deudas      = (deus || []).map(d => ({ ...d, desc: d.descripcion }));
+    // Cache local para offline
+    localStorage.setItem('fin_mov', JSON.stringify(data.movimientos));
+    localStorage.setItem('fin_deu', JSON.stringify(data.deudas));
+  } catch(e) {
+    // Sin internet: usar caché local
+    console.warn('Offline, usando caché local');
+  }
+}
+
+// ── Escuchar cambios de sesión ───────────────────────────────────
+sb.auth.onAuthStateChange(async (event, session) => {
+  if (session?.user) {
+    currentUser = session.user;
+    const nombre = session.user.user_metadata?.nombre || session.user.email;
+    document.getElementById('header-user').textContent = nombre;
+    showAuthScreen(false);
+    await loadFromSupabase();
+    renderResumen();
+    checkReminders();
+    if (Notification.permission === 'granted') setTimeout(syncDeudas, 1500);
+    if (getNtfyTopic()) setTimeout(sendNtfyReminders, 2000);
+  } else {
+    showAuthScreen(true);
+  }
+});
+
 // ==================== ESTADO ====================
 const CATS_GASTO = ['Alimentación','Transporte','Servicios','Salud','Entretenimiento','Ropa','Educación','Hogar','Otros'];
 const CATS_INGRESO = ['Sueldo','Freelance','Negocio','Inversiones','Regalo','Otros'];
 
 function loadData() {
+  // Datos iniciales desde caché local (Supabase los sobreescribe al cargar)
   return {
     movimientos: JSON.parse(localStorage.getItem('fin_mov') || '[]'),
-    deudas: JSON.parse(localStorage.getItem('fin_deu') || '[]'),
+    deudas:      JSON.parse(localStorage.getItem('fin_deu') || '[]'),
   };
 }
 
 function saveData(d) {
+  // Actualizar caché local
   localStorage.setItem('fin_mov', JSON.stringify(d.movimientos));
   localStorage.setItem('fin_deu', JSON.stringify(d.deudas));
-  // Sincronizar con SW y ntfy cada vez que se guarda
   if (typeof syncDeudas === 'function') syncDeudas();
+}
+
+// ── Operaciones individuales en Supabase ─────────────────────────
+async function dbAddMovimiento(m) {
+  if (!currentUser) return;
+  await sb.from('movimientos').upsert({
+    id: m.id, user_id: currentUser.id,
+    tipo: m.tipo, monto: m.monto, descripcion: m.desc,
+    cat: m.cat, fecha: m.fecha, notas: m.notas
+  });
+}
+
+async function dbDeleteMovimiento(id) {
+  if (!currentUser) return;
+  await sb.from('movimientos').delete().eq('id', id);
+}
+
+async function dbSaveDebt(d) {
+  if (!currentUser) return;
+  await sb.from('deudas').upsert({
+    id: d.id, user_id: currentUser.id,
+    acreedor: d.acreedor, monto: d.monto, pagado: d.pagado,
+    vencimiento: d.vencimiento, recordatorio: d.recordatorio,
+    descripcion: d.desc, notas: d.notas, estado: d.estado, creada: d.creada
+  });
+}
+
+async function dbDeleteDebt(id) {
+  if (!currentUser) return;
+  await sb.from('deudas').delete().eq('id', id);
 }
 
 let data = loadData();
@@ -926,15 +1164,17 @@ function updateQuickCat() {
 function addMovimiento() {
   const tipo = document.getElementById('quick-tipo').value;
   const monto = parseFloat(document.getElementById('quick-monto').value);
-  const desc = document.getElementById('quick-desc').value.trim();
+  const desc = document.getElementById('quick-desc').value.trim(); // mapped to 'descripcion' in DB
   const cat = document.getElementById('quick-cat').value;
   const fecha = document.getElementById('quick-fecha').value || today();
 
   if (!monto || monto <= 0) return iosAlert('Ingresa un monto válido');
   if (!desc) return iosAlert('Ingresa una descripción');
 
-  data.movimientos.unshift({ id: uid(), tipo, monto, desc, cat, fecha, notas: '' });
+  const m = { id: uid(), tipo, monto, desc, cat, fecha, notas: '' };
+  data.movimientos.unshift(m);
   saveData(data);
+  dbAddMovimiento(m);
   document.getElementById('quick-monto').value = '';
   document.getElementById('quick-desc').value = '';
   document.getElementById('quick-fecha').value = '';
@@ -952,8 +1192,10 @@ function addMovimientoFull() {
   if (!monto || monto <= 0) return iosAlert('Ingresa un monto válido');
   if (!desc) return iosAlert('Ingresa una descripción');
 
-  data.movimientos.unshift({ id: uid(), tipo, monto, desc, cat, fecha, notas });
+  const mv = { id: uid(), tipo, monto, desc, cat, fecha, notas };
+  data.movimientos.unshift(mv);
   saveData(data);
+  dbAddMovimiento(mv);
   document.getElementById('mov-monto').value = '';
   document.getElementById('mov-desc').value = '';
   document.getElementById('mov-fecha').value = '';
@@ -965,6 +1207,7 @@ function deleteMovimiento(id) {
   iosConfirm('¿Eliminar este movimiento?', () => {
     data.movimientos = data.movimientos.filter(m => m.id !== id);
     saveData(data);
+    dbDeleteMovimiento(id);
     renderMovimientos();
     renderResumen();
   }, 'Eliminar');
@@ -1128,14 +1371,18 @@ function saveDebt() {
 
   const estado = pagado >= monto ? 'pagada' : 'pendiente';
 
+  let deuda;
   if (editId) {
     const idx = data.deudas.findIndex(d => d.id === editId);
     data.deudas[idx] = { ...data.deudas[idx], acreedor, monto, pagado, vencimiento, recordatorio, desc, notas, estado };
+    deuda = data.deudas[idx];
   } else {
-    data.deudas.unshift({ id: uid(), acreedor, monto, pagado, vencimiento, recordatorio, desc, notas, estado, creada: today() });
+    deuda = { id: uid(), acreedor, monto, pagado, vencimiento, recordatorio, desc, notas, estado, creada: today() };
+    data.deudas.unshift(deuda);
   }
 
   saveData(data);
+  dbSaveDebt(deuda);
   closeDebtModal();
   renderDeudas();
   checkReminders();
@@ -1145,6 +1392,7 @@ function deleteDebt(id) {
   iosConfirm('¿Eliminar esta deuda?', () => {
     data.deudas = data.deudas.filter(d => d.id !== id);
     saveData(data);
+    dbDeleteDebt(id);
     renderDeudas();
   }, 'Eliminar');
 }
@@ -1156,6 +1404,7 @@ function markPaid(id) {
     d.pagado = d.monto;
     d.estado = 'pagada';
     saveData(data);
+    dbSaveDebt(d);
     renderDeudas();
     renderResumen();
   }, 'Marcar pagada', false);
@@ -1181,6 +1430,7 @@ function confirmPay() {
   d.pagado = Math.min(d.monto, d.pagado + amount);
   if (d.pagado >= d.monto) d.estado = 'pagada';
   saveData(data);
+  dbSaveDebt(d);
   closePayModal();
   renderDeudas();
   renderResumen();
@@ -1331,6 +1581,8 @@ function init() {
   renderResumen();
 }
 
+// init() es llamado por onAuthStateChange cuando hay sesión activa
+// Igual lo llamamos aquí para preparar la UI base (inputs, categorías, etc.)
 init();
 
 // ==================== EXPORTAR AL CALENDARIO (.ics) ====================
