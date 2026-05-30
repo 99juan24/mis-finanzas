@@ -297,6 +297,7 @@
     .section-header h2 { font-size: 1.1rem; }
 
     @media (max-width: 600px) {
+      .desktop-only { display: none !important; }
       main { padding: 0.75rem; padding-bottom: 5rem; }
       header { padding: 0.75rem 1rem; }
       header h1 { font-size: 1.1rem; }
@@ -353,7 +354,12 @@
 
 <header>
   <h1>💰 Mis Finanzas</h1>
-  <span id="header-date"></span>
+  <div style="display:flex;align-items:center;gap:0.75rem;">
+    <span id="header-date" style="display:none" class="desktop-only"></span>
+    <button id="notif-btn" class="btn btn-primary btn-sm" onclick="requestNotifPermission()">
+      🔔 Activar notificaciones
+    </button>
+  </div>
 </header>
 
 <div id="reminder-banner"></div>
@@ -362,6 +368,7 @@
   <button class="active" onclick="showPage('resumen')">Resumen</button>
   <button onclick="showPage('movimientos')">Movimientos</button>
   <button onclick="showPage('deudas')">Deudas</button>
+  <button onclick="showPage('ajustes')">⚙️ Ajustes</button>
 </nav>
 
 <main>
@@ -518,6 +525,65 @@
     </div>
   </div>
 
+  <!-- ===== AJUSTES ===== -->
+  <div id="page-ajustes" class="page">
+
+    <div class="form-card">
+      <h3>📅 Recordatorios en el Calendario (iPhone)</h3>
+      <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+        La forma más confiable en iPhone. En cada deuda aparece el botón <strong>📅 Calendario</strong>
+        — al tocarlo se descarga un archivo que al abrirlo se agrega automáticamente al
+        Calendario de tu iPhone con la alarma configurada. <strong>No necesitas nada extra.</strong>
+      </p>
+      <div style="background:var(--surface2);border-radius:8px;padding:1rem;font-size:0.85rem;color:var(--muted);line-height:1.8;">
+        <strong style="color:var(--text);">Pasos:</strong><br>
+        1. Ve a <em>Deudas</em> → toca <strong>📅 Calendario</strong> en cualquier deuda<br>
+        2. En iPhone: abre el archivo descargado → toca <em>"Agregar todos"</em><br>
+        3. El Calendario nativo de iOS te mandará la notificación a la hora exacta ✅
+      </div>
+    </div>
+
+    <div class="form-card">
+      <h3>🔔 Notificaciones Push con ntfy (iPhone + Android)</h3>
+      <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;line-height:1.6;">
+        Instala la app <strong>ntfy</strong> (gratis, App Store) y configura tu canal personal.
+        La app te enviará notificaciones push reales cuando abras Mis Finanzas y haya deudas por vencer.
+      </p>
+      <div style="background:var(--surface2);border-radius:8px;padding:1rem;font-size:0.85rem;color:var(--muted);line-height:1.8;margin-bottom:1rem;">
+        <strong style="color:var(--text);">Pasos:</strong><br>
+        1. Descarga <strong>ntfy</strong> en el App Store (gratis)<br>
+        2. Crea un canal único abajo (ej: <em>misfinanzas-juan123</em>)<br>
+        3. En la app ntfy, suscríbete a ese canal<br>
+        4. Cada vez que abras Mis Finanzas con deudas por vencer → recibirás la push ✅
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Tu canal ntfy (nombre único, sin espacios)</label>
+          <input type="text" id="ntfy-topic" placeholder="ej: misfinanzas-juan123" />
+        </div>
+      </div>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button class="btn btn-primary" onclick="saveNtfyTopic()">Guardar canal</button>
+        <button class="btn btn-ghost" onclick="testNtfy()">Enviar notificación de prueba</button>
+      </div>
+      <p id="ntfy-status" style="margin-top:0.75rem;font-size:0.85rem;color:var(--muted);"></p>
+    </div>
+
+    <div class="form-card">
+      <h3>🗂 Datos</h3>
+      <p style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;">
+        Exporta o importa todos tus datos en formato JSON.
+      </p>
+      <div style="display:flex;gap:0.75rem;flex-wrap:wrap;">
+        <button class="btn btn-ghost" onclick="exportData()">⬇️ Exportar datos</button>
+        <button class="btn btn-ghost" onclick="document.getElementById('import-file').click()">⬆️ Importar datos</button>
+        <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)" />
+        <button class="btn btn-red" onclick="clearAllData()">🗑 Borrar todo</button>
+      </div>
+    </div>
+
+  </div>
+
   <!-- ===== DEUDAS ===== -->
   <div id="page-deudas" class="page">
     <div class="summary-grid" style="margin-bottom:1.5rem;">
@@ -621,6 +687,9 @@
   </button>
   <button onclick="showPageMobile('deudas', this)">
     <span class="icon">📋</span>Deudas
+  </button>
+  <button onclick="showPageMobile('ajustes', this)">
+    <span class="icon">⚙️</span>Ajustes
   </button>
 </nav>
 
@@ -1047,10 +1116,13 @@ function renderDeudas() {
       <div class="debt-card-meta">${pct}% pagado</div>
       ${d.vencimiento ? `<div class="debt-card-meta" style="margin-top:0.25rem;">📅 Vence: ${formatDate(d.vencimiento)} · 🔔 Recordatorio: ${d.recordatorio} día(s) antes</div>` : ''}
       ${d.notas ? `<div class="debt-card-meta" style="margin-top:0.25rem;">📝 ${d.notas}</div>` : ''}
-      <div class="debt-card-actions">
+      <div class="debt-card-actions" style="flex-wrap:wrap;">
         ${d.estado !== 'pagada' ? `
           <button class="btn btn-green btn-sm" onclick="openPayModal('${d.id}')">Pagar</button>
           <button class="btn btn-ghost btn-sm" onclick="markPaid('${d.id}')">✓ Pagada</button>
+        ` : ''}
+        ${d.vencimiento && d.estado !== 'pagada' ? `
+          <button class="btn btn-ghost btn-sm" onclick="exportToCalendar('${d.id}')" title="Agregar recordatorio al Calendario de iPhone">📅 Calendario</button>
         ` : ''}
         <button class="btn btn-ghost btn-sm" onclick="openDebtModal('${d.id}')">Editar</button>
         <button class="btn btn-red btn-sm" onclick="deleteDebt('${d.id}')">🗑</button>
@@ -1085,9 +1157,13 @@ function checkReminders() {
 function init() {
   // Fecha en header
   const now = new Date();
-  document.getElementById('header-date').textContent = now.toLocaleDateString('es-MX', {
+  const dateEl = document.getElementById('header-date');
+  dateEl.textContent = now.toLocaleDateString('es-MX', {
     weekday: 'long', year: 'numeric', month: 'long', day: 'numeric'
   });
+  dateEl.style.display = '';
+
+  updateNotifBtn();
 
   // Setear fecha de hoy en inputs
   document.getElementById('quick-fecha').value = today();
@@ -1114,6 +1190,169 @@ function init() {
 
 init();
 
+// ==================== EXPORTAR AL CALENDARIO (.ics) ====================
+function exportToCalendar(id) {
+  const d = data.deudas.find(x => x.id === id);
+  if (!d || !d.vencimiento) return;
+
+  const restante = d.monto - d.pagado;
+  const fmt2 = (n) => '$' + Number(n||0).toLocaleString('es-MX',{minimumFractionDigits:2});
+
+  // Formatear fecha para .ics (YYYYMMDD)
+  const icsDate = d.vencimiento.replace(/-/g, '');
+  // Día siguiente (fin del evento)
+  const nextDay = new Date(d.vencimiento + 'T00:00:00');
+  nextDay.setDate(nextDay.getDate() + 1);
+  const icsDtend = nextDay.toISOString().split('T')[0].replace(/-/g, '');
+
+  // UID único
+  const uid2 = `deuda-${d.id}@misfinanzas`;
+
+  // VALARM: X días antes del vencimiento
+  const triggerDias = `-P${d.recordatorio}D`;
+  // VALARM: el mismo día
+  const triggerHoy = `-PT0S`;
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Mis Finanzas//ES',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    'BEGIN:VEVENT',
+    `UID:${uid2}`,
+    `DTSTART;VALUE=DATE:${icsDate}`,
+    `DTEND;VALUE=DATE:${icsDtend}`,
+    `SUMMARY:💰 Vence deuda: ${d.acreedor}`,
+    `DESCRIPTION:Monto pendiente: ${fmt2(restante)}\\nTotal: ${fmt2(d.monto)}\\n${d.desc ? 'Concepto: ' + d.desc : ''}`,
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    `TRIGGER:${triggerDias}`,
+    `DESCRIPTION:⏰ En ${d.recordatorio} día(s) vence tu deuda con ${d.acreedor} — ${fmt2(restante)}`,
+    'END:VALARM',
+    'BEGIN:VALARM',
+    'ACTION:DISPLAY',
+    `TRIGGER:${triggerHoy}`,
+    `DESCRIPTION:🚨 HOY vence tu deuda con ${d.acreedor} — ${fmt2(restante)}`,
+    'END:VALARM',
+    'END:VEVENT',
+    'END:VCALENDAR'
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `deuda-${d.acreedor.replace(/\s+/g,'-')}.ics`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('📅 Archivo descargado — ábrelo en tu iPhone para agregarlo al Calendario');
+}
+
+// ==================== NTFY ====================
+function saveNtfyTopic() {
+  const topic = document.getElementById('ntfy-topic').value.trim().toLowerCase().replace(/\s+/g,'-');
+  if (!topic) return;
+  localStorage.setItem('fin_ntfy', topic);
+  document.getElementById('ntfy-status').textContent = `✅ Canal guardado: ${topic}`;
+  showToast('Canal ntfy guardado');
+}
+
+function getNtfyTopic() {
+  return localStorage.getItem('fin_ntfy') || '';
+}
+
+async function sendNtfy(title, body, priority = 3) {
+  const topic = getNtfyTopic();
+  if (!topic) return false;
+  try {
+    await fetch(`https://ntfy.sh/${topic}`, {
+      method: 'POST',
+      headers: {
+        'Title': title,
+        'Priority': String(priority),
+        'Tags': 'money_with_wings',
+        'Content-Type': 'text/plain'
+      },
+      body
+    });
+    return true;
+  } catch { return false; }
+}
+
+async function testNtfy() {
+  const topic = document.getElementById('ntfy-topic').value.trim() || getNtfyTopic();
+  if (!topic) {
+    document.getElementById('ntfy-status').textContent = '⚠️ Ingresa tu canal primero';
+    return;
+  }
+  document.getElementById('ntfy-status').textContent = 'Enviando...';
+  const ok = await sendNtfy('✅ Mis Finanzas', `Notificaciones activas para tu cuenta. Canal: ${topic}`, 3);
+  document.getElementById('ntfy-status').textContent = ok
+    ? '✅ Notificación enviada — revisa la app ntfy en tu iPhone'
+    : '❌ Error al enviar. Verifica el nombre del canal.';
+}
+
+async function sendNtfyReminders() {
+  const topic = getNtfyTopic();
+  if (!topic) return;
+  const alerts = [];
+  data.deudas.forEach(d => {
+    if (d.estado === 'pagada' || !d.vencimiento) return;
+    const days = diffDays(d.vencimiento);
+    const restante = d.monto - d.pagado;
+    if (days < 0) {
+      alerts.push({ title: '⚠️ Deuda vencida', body: `${d.acreedor} — ${fmt(restante)} (hace ${Math.abs(days)} día${Math.abs(days)!==1?'s':''})`, priority: 5 });
+    } else if (days === 0) {
+      alerts.push({ title: '🚨 Vence HOY', body: `${d.acreedor} — ${fmt(restante)}`, priority: 5 });
+    } else if (days <= d.recordatorio) {
+      alerts.push({ title: '🔔 Deuda próxima', body: `${d.acreedor} — ${fmt(restante)} (en ${days} día${days!==1?'s':''})`, priority: 4 });
+    }
+  });
+  for (const a of alerts) await sendNtfy(a.title, a.body, a.priority);
+}
+
+// ==================== EXPORTAR / IMPORTAR DATOS ====================
+function exportData() {
+  const json = JSON.stringify(data, null, 2);
+  const blob = new Blob([json], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `mis-finanzas-${today()}.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+  showToast('⬇️ Datos exportados');
+}
+
+function importData(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    try {
+      const imported = JSON.parse(ev.target.result);
+      if (!imported.movimientos || !imported.deudas) throw new Error();
+      if (!confirm(`¿Importar datos? Esto reemplazará tus datos actuales.\n\nMovimientos: ${imported.movimientos.length}\nDeudas: ${imported.deudas.length}`)) return;
+      data = imported;
+      saveData(data);
+      renderResumen();
+      showToast('✅ Datos importados correctamente');
+    } catch { alert('Archivo inválido. Usa un JSON exportado desde esta app.'); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+function clearAllData() {
+  if (!confirm('⚠️ ¿Borrar TODOS los datos? Esta acción no se puede deshacer.')) return;
+  if (!confirm('¿Estás seguro? Se borrarán todos los movimientos y deudas.')) return;
+  data = { movimientos: [], deudas: [] };
+  saveData(data);
+  renderResumen();
+  showToast('🗑 Datos borrados');
+}
+
 function showPageMobile(name, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.bottom-nav button').forEach(b => b.classList.remove('active'));
@@ -1124,11 +1363,111 @@ function showPageMobile(name, btn) {
   if (name === 'deudas') renderDeudas();
 }
 
+// ── Service Worker + Notificaciones ────────────────────────────
+let swReg = null;
+
 if ('serviceWorker' in navigator) {
-  window.addEventListener('load', () => {
-    navigator.serviceWorker.register('./sw.js').catch(() => {});
+  window.addEventListener('load', async () => {
+    try {
+      swReg = await navigator.serviceWorker.register('./sw.js');
+
+      // Escuchar mensajes del SW (cuando pide las deudas en bg)
+      navigator.serviceWorker.addEventListener('message', e => {
+        if (e.data?.type === 'REQUEST_DEUDAS') syncDeudas();
+      });
+
+      // Registrar Periodic Background Sync si está disponible
+      if ('periodicSync' in swReg) {
+        const status = await navigator.permissions.query({ name: 'periodic-background-sync' });
+        if (status.state === 'granted') {
+          await swReg.periodicSync.register('check-deudas', { minInterval: 6 * 60 * 60 * 1000 }); // cada 6h
+        }
+      }
+    } catch(e) {}
   });
 }
+
+// Enviar deudas al SW para que pueda notificar
+function syncDeudas() {
+  if (!swReg?.active) return;
+  swReg.active.postMessage({ type: 'SYNC_DEUDAS', deudas: data.deudas });
+}
+
+// Pedir permiso de notificaciones
+async function requestNotifPermission() {
+  if (!('Notification' in window)) {
+    alert('Tu navegador no soporta notificaciones.');
+    return;
+  }
+  const perm = await Notification.requestPermission();
+  if (perm === 'granted') {
+    updateNotifBtn();
+    syncDeudas();
+    showToast('✅ Notificaciones activadas');
+  } else {
+    showToast('⚠️ Permiso denegado. Actívalo en ajustes del navegador.');
+  }
+}
+
+function updateNotifBtn() {
+  const btn = document.getElementById('notif-btn');
+  if (!btn) return;
+  const perm = Notification.permission;
+  if (perm === 'granted') {
+    btn.textContent = '🔔 Notificaciones activas';
+    btn.classList.remove('btn-primary');
+    btn.classList.add('btn-ghost');
+    btn.disabled = true;
+  } else {
+    btn.textContent = '🔔 Activar notificaciones';
+    btn.classList.add('btn-primary');
+    btn.disabled = false;
+  }
+}
+
+// Toast mensaje
+function showToast(msg) {
+  let t = document.getElementById('toast');
+  if (!t) {
+    t = document.createElement('div');
+    t.id = 'toast';
+    t.style.cssText = `
+      position:fixed; bottom:5rem; left:50%; transform:translateX(-50%);
+      background:#1e293b; color:#e2e8f0; padding:0.6rem 1.25rem;
+      border-radius:999px; font-size:0.875rem; z-index:500;
+      border:1px solid #334155; box-shadow:0 4px 20px #0008;
+      opacity:0; transition:opacity 0.3s; white-space:nowrap;
+    `;
+    document.body.appendChild(t);
+  }
+  t.textContent = msg;
+  t.style.opacity = '1';
+  clearTimeout(t._timer);
+  t._timer = setTimeout(() => t.style.opacity = '0', 3000);
+}
+
+// Sincronizar deudas cada vez que se guarden
+const _origSave = saveData;
+function saveData(d) {
+  _origSave(d);
+  syncDeudas();
+}
+
+// Al cargar: notificar si ya hay permiso + enviar ntfy
+window.addEventListener('load', () => {
+  if (Notification.permission === 'granted') setTimeout(syncDeudas, 1500);
+  // ntfy: enviar recordatorios al abrir la app (máx 1 vez cada 6h)
+  const lastNtfy = parseInt(localStorage.getItem('fin_ntfy_last') || '0');
+  const ahora = Date.now();
+  if (getNtfyTopic() && (ahora - lastNtfy) > 6 * 60 * 60 * 1000) {
+    localStorage.setItem('fin_ntfy_last', ahora.toString());
+    setTimeout(sendNtfyReminders, 2000);
+  }
+  // Pre-cargar topic guardado en el input de ajustes
+  const t = getNtfyTopic();
+  const inp = document.getElementById('ntfy-topic');
+  if (inp && t) { inp.value = t; document.getElementById('ntfy-status').textContent = `Canal activo: ${t}`; }
+});
 </script>
 </body>
 </html>
