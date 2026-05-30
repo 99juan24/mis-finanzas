@@ -715,6 +715,27 @@
   </button>
 </nav>
 
+<!-- Modal confirmación genérico -->
+<div class="modal-overlay" id="confirm-modal">
+  <div class="modal" style="max-width:360px;">
+    <p id="confirm-msg" style="font-size:1rem;line-height:1.5;margin-bottom:1.25rem;"></p>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" id="confirm-no">Cancelar</button>
+      <button class="btn btn-red" id="confirm-yes">Confirmar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal alerta genérico -->
+<div class="modal-overlay" id="alert-modal">
+  <div class="modal" style="max-width:360px;">
+    <p id="alert-msg" style="font-size:1rem;line-height:1.5;margin-bottom:1.25rem;"></p>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="document.getElementById('alert-modal').classList.remove('show')">Entendido</button>
+    </div>
+  </div>
+</div>
+
 <!-- Modal confirmar pago parcial -->
 <div class="modal-overlay" id="pay-modal">
   <div class="modal">
@@ -744,9 +765,11 @@ function loadData() {
   };
 }
 
-function saveData(data) {
-  localStorage.setItem('fin_mov', JSON.stringify(data.movimientos));
-  localStorage.setItem('fin_deu', JSON.stringify(data.deudas));
+function saveData(d) {
+  localStorage.setItem('fin_mov', JSON.stringify(d.movimientos));
+  localStorage.setItem('fin_deu', JSON.stringify(d.deudas));
+  // Sincronizar con SW y ntfy cada vez que se guarda
+  if (typeof syncDeudas === 'function') syncDeudas();
 }
 
 let data = loadData();
@@ -812,8 +835,8 @@ function addMovimiento() {
   const cat = document.getElementById('quick-cat').value;
   const fecha = document.getElementById('quick-fecha').value || today();
 
-  if (!monto || monto <= 0) return alert('Ingresa un monto válido');
-  if (!desc) return alert('Ingresa una descripción');
+  if (!monto || monto <= 0) return iosAlert('Ingresa un monto válido');
+  if (!desc) return iosAlert('Ingresa una descripción');
 
   data.movimientos.unshift({ id: uid(), tipo, monto, desc, cat, fecha, notas: '' });
   saveData(data);
@@ -831,8 +854,8 @@ function addMovimientoFull() {
   const fecha = document.getElementById('mov-fecha').value || today();
   const notas = document.getElementById('mov-notas').value.trim();
 
-  if (!monto || monto <= 0) return alert('Ingresa un monto válido');
-  if (!desc) return alert('Ingresa una descripción');
+  if (!monto || monto <= 0) return iosAlert('Ingresa un monto válido');
+  if (!desc) return iosAlert('Ingresa una descripción');
 
   data.movimientos.unshift({ id: uid(), tipo, monto, desc, cat, fecha, notas });
   saveData(data);
@@ -844,11 +867,12 @@ function addMovimientoFull() {
 }
 
 function deleteMovimiento(id) {
-  if (!confirm('¿Eliminar este movimiento?')) return;
-  data.movimientos = data.movimientos.filter(m => m.id !== id);
-  saveData(data);
-  renderMovimientos();
-  renderResumen();
+  iosConfirm('¿Eliminar este movimiento?', () => {
+    data.movimientos = data.movimientos.filter(m => m.id !== id);
+    saveData(data);
+    renderMovimientos();
+    renderResumen();
+  }, 'Eliminar');
 }
 
 function movRow(m, withNotas = false) {
@@ -1003,9 +1027,9 @@ function saveDebt() {
   const notas = document.getElementById('d-notas').value.trim();
   const editId = document.getElementById('d-edit-id').value;
 
-  if (!acreedor) return alert('Ingresa el nombre del acreedor');
-  if (!monto || monto <= 0) return alert('Ingresa un monto válido');
-  if (!vencimiento) return alert('Selecciona la fecha de vencimiento');
+  if (!acreedor) return iosAlert('Ingresa el nombre del acreedor');
+  if (!monto || monto <= 0) return iosAlert('Ingresa un monto válido');
+  if (!vencimiento) return iosAlert('Selecciona la fecha de vencimiento');
 
   const estado = pagado >= monto ? 'pagada' : 'pendiente';
 
@@ -1023,21 +1047,23 @@ function saveDebt() {
 }
 
 function deleteDebt(id) {
-  if (!confirm('¿Eliminar esta deuda?')) return;
-  data.deudas = data.deudas.filter(d => d.id !== id);
-  saveData(data);
-  renderDeudas();
+  iosConfirm('¿Eliminar esta deuda?', () => {
+    data.deudas = data.deudas.filter(d => d.id !== id);
+    saveData(data);
+    renderDeudas();
+  }, 'Eliminar');
 }
 
 function markPaid(id) {
   const d = data.deudas.find(x => x.id === id);
   if (!d) return;
-  if (!confirm(`¿Marcar "${d.acreedor}" como pagada completamente?`)) return;
-  d.pagado = d.monto;
-  d.estado = 'pagada';
-  saveData(data);
-  renderDeudas();
-  renderResumen();
+  iosConfirm(`¿Marcar "${d.acreedor}" como pagada completamente?`, () => {
+    d.pagado = d.monto;
+    d.estado = 'pagada';
+    saveData(data);
+    renderDeudas();
+    renderResumen();
+  }, 'Marcar pagada', false);
 }
 
 function openPayModal(id) {
@@ -1055,7 +1081,7 @@ function closePayModal() {
 function confirmPay() {
   const id = document.getElementById('pay-debt-id').value;
   const amount = parseFloat(document.getElementById('pay-amount').value);
-  if (!amount || amount <= 0) return alert('Ingresa un monto válido');
+  if (!amount || amount <= 0) return iosAlert('Ingresa un monto válido');
   const d = data.deudas.find(x => x.id === id);
   d.pagado = Math.min(d.monto, d.pagado + amount);
   if (d.pagado >= d.monto) d.estado = 'pagada';
@@ -1261,14 +1287,26 @@ function exportToCalendar(id) {
     'END:VCALENDAR'
   ].join('\r\n');
 
-  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url;
-  a.download = `deuda-${d.acreedor.replace(/\s+/g,'-')}.ics`;
-  a.click();
-  URL.revokeObjectURL(url);
-  showToast('📅 Archivo descargado — ábrelo en tu iPhone para agregarlo al Calendario');
+  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
+
+  if (isIOS) {
+    // iOS Safari no soporta el atributo download ni Blob URLs para .ics
+    // Navegamos directo al data URI — iOS lo abre con la app Calendario
+    const dataUri = 'data:text/calendar;charset=utf-8,' + encodeURIComponent(ics);
+    window.location.href = dataUri;
+  } else {
+    // Android / escritorio: descarga normal
+    const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `deuda-${d.acreedor.replace(/\s+/g,'-')}.ics`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    showToast('📅 Archivo descargado — ábrelo para agregarlo al Calendario');
+  }
 }
 
 // ==================== NTFY ====================
@@ -1355,11 +1393,15 @@ function importData(e) {
     try {
       const imported = JSON.parse(ev.target.result);
       if (!imported.movimientos || !imported.deudas) throw new Error();
-      if (!confirm(`¿Importar datos? Esto reemplazará tus datos actuales.\n\nMovimientos: ${imported.movimientos.length}\nDeudas: ${imported.deudas.length}`)) return;
-      data = imported;
-      saveData(data);
-      renderResumen();
-      showToast('✅ Datos importados correctamente');
+      iosConfirm(
+        `¿Importar datos? Esto reemplazará tus datos actuales.\n\nMovimientos: ${imported.movimientos.length} · Deudas: ${imported.deudas.length}`,
+        () => {
+          data = imported;
+          saveData(data);
+          renderResumen();
+          showToast('✅ Datos importados correctamente');
+        }, 'Importar', false
+      );
     } catch { alert('Archivo inválido. Usa un JSON exportado desde esta app.'); }
   };
   reader.readAsText(file);
@@ -1367,12 +1409,12 @@ function importData(e) {
 }
 
 function clearAllData() {
-  if (!confirm('⚠️ ¿Borrar TODOS los datos? Esta acción no se puede deshacer.')) return;
-  if (!confirm('¿Estás seguro? Se borrarán todos los movimientos y deudas.')) return;
-  data = { movimientos: [], deudas: [] };
-  saveData(data);
-  renderResumen();
-  showToast('🗑 Datos borrados');
+  iosConfirm('⚠️ ¿Borrar TODOS los datos? Esta acción no se puede deshacer.', () => {
+    data = { movimientos: [], deudas: [] };
+    saveData(data);
+    renderResumen();
+    showToast('🗑 Datos borrados');
+  }, 'Borrar todo');
 }
 
 function showPageMobile(name, btn) {
@@ -1383,6 +1425,26 @@ function showPageMobile(name, btn) {
   if (name === 'resumen') renderResumen();
   if (name === 'movimientos') renderMovimientos();
   if (name === 'deudas') renderDeudas();
+}
+
+// ==================== DIALOGS iOS-COMPATIBLES ====================
+function iosAlert(msg) {
+  document.getElementById('alert-msg').textContent = msg;
+  document.getElementById('alert-modal').classList.add('show');
+}
+
+function iosConfirm(msg, onYes, btnLabel = 'Confirmar', danger = true) {
+  document.getElementById('confirm-msg').textContent = msg;
+  const yesBtn = document.getElementById('confirm-yes');
+  const noBtn  = document.getElementById('confirm-no');
+  yesBtn.textContent = btnLabel;
+  yesBtn.className = 'btn ' + (danger ? 'btn-red' : 'btn-primary');
+  const modal = document.getElementById('confirm-modal');
+  modal.classList.add('show');
+  // Reemplazar listeners
+  const close = () => modal.classList.remove('show');
+  yesBtn.onclick = () => { close(); onYes(); };
+  noBtn.onclick  = close;
 }
 
 // ── Service Worker + Notificaciones ────────────────────────────
@@ -1468,12 +1530,7 @@ function showToast(msg) {
   t._timer = setTimeout(() => t.style.opacity = '0', 3000);
 }
 
-// Sincronizar deudas cada vez que se guarden
-const _origSave = saveData;
-function saveData(d) {
-  _origSave(d);
-  syncDeudas();
-}
+// syncDeudas se llama desde saveData directamente (arriba)
 
 // Al cargar: notificar si ya hay permiso + enviar ntfy
 window.addEventListener('load', () => {
