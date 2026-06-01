@@ -1246,28 +1246,41 @@ async function checkFaceIDOnLoad() {
 }
 
 // ── Realtime: sincronización entre dispositivos ───────────────────
-function setupRealtime(userId) {
-  sb.removeAllChannels(); // evitar duplicados
-  sb.channel('user-data-' + userId)
-    .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'movimientos',
-      filter: `user_id=eq.${userId}`
-    }, async () => {
-      await loadFromSupabase();
-      renderResumen();
-      if (document.getElementById('page-movimientos').classList.contains('active')) renderMovimientos();
-    })
-    .on('postgres_changes', {
-      event: '*', schema: 'public', table: 'deudas',
-      filter: `user_id=eq.${userId}`
-    }, async () => {
-      await loadFromSupabase();
-      renderResumen();
-      if (document.getElementById('page-deudas').classList.contains('active')) renderDeudas();
-      checkReminders();
-    })
-    .subscribe();
+function refreshUI() {
+  renderResumen();
+  if (document.getElementById('page-movimientos').classList.contains('active')) renderMovimientos();
+  if (document.getElementById('page-deudas').classList.contains('active')) renderDeudas();
+  if (document.getElementById('page-resumen').classList.contains('active')) renderResumen();
+  checkReminders();
 }
+
+function setupRealtime(userId) {
+  try { sb.removeAllChannels(); } catch(e) {}
+
+  // Sin filtro de fila — RLS en la DB garantiza que cada usuario
+  // solo recibe y lee sus propios datos al hacer loadFromSupabase()
+  sb.channel('mis-finanzas-' + userId)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'movimientos' },
+      async () => { await loadFromSupabase(); refreshUI(); })
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'deudas' },
+      async () => { await loadFromSupabase(); refreshUI(); })
+    .subscribe((status) => {
+      console.log('Realtime status:', status);
+    });
+}
+
+// Recargar datos cuando el usuario vuelve a la app (cambia de pestaña o desbloquea)
+let lastRefresh = 0;
+document.addEventListener('visibilitychange', async () => {
+  if (document.visibilityState === 'visible' && currentUser) {
+    const now = Date.now();
+    if (now - lastRefresh > 10000) { // máximo 1 vez cada 10 segundos
+      lastRefresh = now;
+      await loadFromSupabase();
+      refreshUI();
+    }
+  }
+});
 
 // ── Cargar datos desde Supabase ──────────────────────────────────
 async function loadFromSupabase() {
