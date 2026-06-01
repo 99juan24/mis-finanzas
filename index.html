@@ -789,15 +789,6 @@
       </div>
     </div>
 
-    <!-- Debug panel -->
-    <div class="form-card" id="debug-card">
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
-        <h3 style="color:var(--muted);">🐛 Debug Log</h3>
-        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('debug-log').innerHTML='';document.getElementById('debug-log').parentElement.parentElement.style.display='none'">Cerrar</button>
-      </div>
-      <div id="debug-log" style="background:#0a0f1a;border-radius:8px;padding:0.75rem;max-height:200px;overflow-y:auto;font-family:monospace;"></div>
-    </div>
-
     <!-- Cerrar sesión -->
     <div class="form-card" style="border-color:#ef444433;">
       <h3 style="color:var(--red);">👤 Cuenta</h3>
@@ -857,23 +848,63 @@
 <div class="modal-overlay" id="debt-modal">
   <div class="modal">
     <h3 id="debt-modal-title">Nueva Deuda</h3>
+
     <div class="form-group" style="margin-bottom:0.75rem;">
-      <label>Acreedor (a quien le debes)</label>
-      <input type="text" id="d-acreedor" placeholder="Ej: Banco, Persona, Tarjeta..." />
+      <label>Acreedor (banco, persona, tarjeta...)</label>
+      <input type="text" id="d-acreedor" placeholder="Ej: Banco X, Visa, Juan..." />
     </div>
+
     <div class="form-row">
       <div class="form-group">
-        <label>Monto Total</label>
+        <label>Monto Total de la Deuda</label>
         <input type="number" id="d-monto" placeholder="0.00" min="0" step="0.01" />
       </div>
       <div class="form-group">
-        <label>Monto Pagado</label>
+        <label>Ya pagado</label>
         <input type="number" id="d-pagado" placeholder="0.00" min="0" step="0.01" value="0" />
       </div>
     </div>
+
+    <!-- Toggle cuotas -->
+    <div style="background:var(--surface2);border-radius:8px;padding:0.875rem;margin-bottom:0.75rem;">
+      <label style="display:flex;align-items:center;gap:0.75rem;cursor:pointer;user-select:none;">
+        <div style="position:relative;width:44px;height:24px;flex-shrink:0;">
+          <input type="checkbox" id="d-tiene-cuotas" onchange="toggleCuotasFields()"
+            style="opacity:0;width:0;height:0;position:absolute;" />
+          <div id="d-toggle-track" style="
+            position:absolute;inset:0;border-radius:999px;
+            background:var(--border);transition:background 0.2s;
+          "></div>
+          <div id="d-toggle-thumb" style="
+            position:absolute;top:3px;left:3px;width:18px;height:18px;
+            background:#fff;border-radius:50%;transition:left 0.2s;
+          "></div>
+        </div>
+        <span style="font-size:0.9rem;font-weight:500;">¿Tiene cuotas/mensualidades?</span>
+      </label>
+      <p style="color:var(--muted);font-size:0.78rem;margin-top:0.4rem;margin-left:56px;">
+        Activa esto para créditos, tarjetas o cualquier deuda con pagos periódicos
+      </p>
+    </div>
+
+    <!-- Campos de cuotas (se muestran si tiene_cuotas) -->
+    <div id="d-cuotas-fields" style="display:none;">
+      <div class="form-row">
+        <div class="form-group">
+          <label>Valor de la cuota</label>
+          <input type="number" id="d-valor-cuota" placeholder="0.00" min="0" step="0.01" />
+        </div>
+        <div class="form-group">
+          <label>Fecha próxima cuota</label>
+          <input type="date" id="d-fecha-cuota" />
+        </div>
+      </div>
+    </div>
+
+    <!-- Fecha vencimiento y recordatorio -->
     <div class="form-row">
       <div class="form-group">
-        <label>Fecha de Vencimiento</label>
+        <label>Fecha de vencimiento final</label>
         <input type="date" id="d-vencimiento" />
       </div>
       <div class="form-group">
@@ -886,6 +917,7 @@
         </select>
       </div>
     </div>
+
     <div class="form-group" style="margin-bottom:0.75rem;">
       <label>Descripción / Motivo</label>
       <input type="text" id="d-desc" placeholder="Para qué es esta deuda" />
@@ -898,6 +930,29 @@
     <div class="modal-footer">
       <button class="btn btn-ghost" onclick="closeDebtModal()">Cancelar</button>
       <button class="btn btn-primary" onclick="saveDebt()">Guardar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal editar cuota -->
+<div class="modal-overlay" id="edit-cuota-modal">
+  <div class="modal" style="max-width:360px;">
+    <h3>Editar Cuota</h3>
+    <p id="edit-cuota-debt-name" style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;"></p>
+    <div class="form-row">
+      <div class="form-group">
+        <label>Nuevo valor de cuota</label>
+        <input type="number" id="edit-cuota-valor" placeholder="0.00" min="0" step="0.01" />
+      </div>
+      <div class="form-group">
+        <label>Próxima fecha de cuota</label>
+        <input type="date" id="edit-cuota-fecha" />
+      </div>
+    </div>
+    <input type="hidden" id="edit-cuota-debt-id" />
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="document.getElementById('edit-cuota-modal').classList.remove('show')">Cancelar</button>
+      <button class="btn btn-primary" onclick="saveEditCuota()">Guardar</button>
     </div>
   </div>
 </div>
@@ -957,37 +1012,6 @@
 </div>
 
 <script>
-// ==================== DEBUG PANEL ====================
-(function() {
-  const logs = [];
-  function addLog(type, args) {
-    const msg = Array.from(args).map(a => {
-      try { return typeof a === 'object' ? JSON.stringify(a) : String(a); }
-      catch(e) { return '[object]'; }
-    }).join(' ');
-    logs.push({ type, msg, time: new Date().toLocaleTimeString() });
-    const panel = document.getElementById('debug-log');
-    if (panel) {
-      panel.innerHTML = logs.slice(-30).reverse().map(l =>
-        `<div style="color:${l.type==='error'?'#f87171':l.type==='warn'?'#fbbf24':'#94a3b8'};font-size:0.72rem;border-bottom:1px solid #1e293b;padding:0.2rem 0;">
-          <span style="color:#475569;">${l.time}</span> ${l.msg}
-        </div>`
-      ).join('');
-    }
-  }
-  const _log   = console.log.bind(console);
-  const _error = console.error.bind(console);
-  const _warn  = console.warn.bind(console);
-  console.log   = function() { _log(...arguments);   addLog('log',   arguments); };
-  console.error = function() { _error(...arguments); addLog('error', arguments); };
-  console.warn  = function() { _warn(...arguments);  addLog('warn',  arguments); };
-  window.onerror = function(msg, src, line, col, err) {
-    addLog('error', [`JS ERROR: ${msg} (línea ${line})`]);
-  };
-  window.onunhandledrejection = function(e) {
-    addLog('error', [`Promise error: ${e.reason}`]);
-  };
-})();
 // ==================== SUPABASE ====================
 const SUPA_URL = 'https://mqkjtqocyrizxffguoqr.supabase.co';
 const SUPA_KEY = 'sb_publishable_X4ZV_C3HTqBO1rTqujJ52w_XyVJA4PD';
@@ -1253,7 +1277,13 @@ async function loadFromSupabase() {
       sb.from('deudas').select('*').order('created_at', { ascending: false })
     ]);
     data.movimientos = (movs || []).map(m => ({ ...m, desc: m.descripcion }));
-    data.deudas      = (deus || []).map(d => ({ ...d, desc: d.descripcion }));
+    data.deudas = (deus || []).map(d => ({
+      ...d,
+      desc: d.descripcion,
+      tiene_cuotas: !!d.tiene_cuotas,
+      valor_cuota: d.valor_cuota || 0,
+      fecha_proxima_cuota: d.fecha_proxima_cuota || ''
+    }));
     // Cache local para offline
     localStorage.setItem('fin_mov', JSON.stringify(data.movimientos));
     localStorage.setItem('fin_deu', JSON.stringify(data.deudas));
@@ -1286,8 +1316,20 @@ sb.auth.onAuthStateChange(async (event, session) => {
 });
 
 // ==================== ESTADO ====================
-const CATS_GASTO = ['Alimentación','Transporte','Servicios','Salud','Entretenimiento','Ropa','Educación','Hogar','Otros'];
-const CATS_INGRESO = ['Sueldo','Freelance','Negocio','Inversiones','Regalo','Otros'];
+const CATS_GASTO_BASE = ['Alimentación','Transporte','Servicios','Salud','Entretenimiento','Ropa','Educación','Hogar','Otros'];
+const CATS_INGRESO    = ['Sueldo','Freelance','Negocio','Inversiones','Regalo','Otros'];
+const DEBT_PREFIX     = '💳 ';
+
+// Categorías de gasto = base + deudas activas con cuotas
+function getCatsGasto() {
+  const deudaCats = (data?.deudas || [])
+    .filter(d => d.estado !== 'pagada' && d.tiene_cuotas)
+    .map(d => DEBT_PREFIX + d.acreedor);
+  return [...CATS_GASTO_BASE, ...deudaCats];
+}
+
+function isDebtCat(cat) { return cat && cat.startsWith(DEBT_PREFIX); }
+function debtNameFromCat(cat) { return cat.replace(DEBT_PREFIX, ''); }
 
 function loadData() {
   // Datos iniciales desde caché local (Supabase los sobreescribe al cargar)
@@ -1324,8 +1366,10 @@ async function dbSaveDebt(d) {
   await sb.from('deudas').upsert({
     id: d.id, user_id: currentUser.id,
     acreedor: d.acreedor, monto: d.monto, pagado: d.pagado,
-    vencimiento: d.vencimiento, recordatorio: d.recordatorio,
-    descripcion: d.desc, notas: d.notas, estado: d.estado, creada: d.creada
+    vencimiento: d.vencimiento || null, recordatorio: d.recordatorio,
+    descripcion: d.desc, notas: d.notas, estado: d.estado, creada: d.creada,
+    tiene_cuotas: !!d.tiene_cuotas, valor_cuota: d.valor_cuota || 0,
+    fecha_proxima_cuota: d.fecha_proxima_cuota || null
   });
 }
 
@@ -1373,20 +1417,23 @@ function showPage(name) {
 }
 
 // ==================== CATEGORÍAS ====================
-function fillCatOptions(selectId, tipo) {
-  const sel = document.getElementById(selectId);
-  const cats = tipo === 'gasto' ? CATS_GASTO : CATS_INGRESO;
-  sel.innerHTML = cats.map(c => `<option value="${c}">${c}</option>`).join('');
+function fillCatOptions(selectId, tipo, currentVal) {
+  const sel  = document.getElementById(selectId);
+  const cats = tipo === 'gasto' ? getCatsGasto() : CATS_INGRESO;
+  sel.innerHTML = cats.map(c => {
+    const isDebt = isDebtCat(c);
+    const label  = isDebt ? c : c;
+    return `<option value="${c}" ${isDebt ? 'style="color:var(--accent2)"' : ''}>${label}</option>`;
+  }).join('');
+  if (currentVal) sel.value = currentVal;
 }
 
 function updateCatOptions() {
-  const tipo = document.getElementById('mov-tipo').value;
-  fillCatOptions('mov-cat', tipo);
+  fillCatOptions('mov-cat', document.getElementById('mov-tipo').value);
 }
 
 function updateQuickCat() {
-  const tipo = document.getElementById('quick-tipo').value;
-  fillCatOptions('quick-cat', tipo);
+  fillCatOptions('quick-cat', document.getElementById('quick-tipo').value);
 }
 
 // ==================== MOVIMIENTOS ====================
@@ -1402,6 +1449,7 @@ function addMovimiento() {
 
   const m = { id: uid(), tipo, monto, desc, cat, fecha, notas: '' };
   data.movimientos.unshift(m);
+  if (tipo === 'gasto' && isDebtCat(cat)) applyDebtPayment(cat, monto);
   saveData(data);
   dbAddMovimiento(m);
   document.getElementById('quick-monto').value = '';
@@ -1423,6 +1471,7 @@ function addMovimientoFull() {
 
   const mv = { id: uid(), tipo, monto, desc, cat, fecha, notas };
   data.movimientos.unshift(mv);
+  if (tipo === 'gasto' && isDebtCat(cat)) applyDebtPayment(cat, monto);
   saveData(data);
   dbAddMovimiento(mv);
   document.getElementById('mov-monto').value = '';
@@ -1558,25 +1607,38 @@ function renderResumen() {
 }
 
 // ==================== DEUDAS ====================
+function toggleCuotasFields() {
+  const checked = document.getElementById('d-tiene-cuotas').checked;
+  document.getElementById('d-cuotas-fields').style.display = checked ? '' : 'none';
+  document.getElementById('d-toggle-track').style.background = checked ? 'var(--accent)' : 'var(--border)';
+  document.getElementById('d-toggle-thumb').style.left = checked ? '23px' : '3px';
+}
+
 function openDebtModal(id) {
   document.getElementById('debt-modal-title').textContent = id ? 'Editar Deuda' : 'Nueva Deuda';
   document.getElementById('d-edit-id').value = id || '';
   if (id) {
     const d = data.deudas.find(x => x.id === id);
-    document.getElementById('d-acreedor').value = d.acreedor;
-    document.getElementById('d-monto').value = d.monto;
-    document.getElementById('d-pagado').value = d.pagado;
-    document.getElementById('d-vencimiento').value = d.vencimiento;
-    document.getElementById('d-recordatorio').value = d.recordatorio;
-    document.getElementById('d-desc').value = d.desc;
-    document.getElementById('d-notas').value = d.notas;
+    document.getElementById('d-acreedor').value      = d.acreedor;
+    document.getElementById('d-monto').value         = d.monto;
+    document.getElementById('d-pagado').value        = d.pagado;
+    document.getElementById('d-vencimiento').value   = d.vencimiento || '';
+    document.getElementById('d-recordatorio').value  = d.recordatorio;
+    document.getElementById('d-desc').value          = d.desc || '';
+    document.getElementById('d-notas').value         = d.notas || '';
+    document.getElementById('d-tiene-cuotas').checked = !!d.tiene_cuotas;
+    document.getElementById('d-valor-cuota').value   = d.valor_cuota || '';
+    document.getElementById('d-fecha-cuota').value   = d.fecha_proxima_cuota || '';
   } else {
-    ['d-acreedor','d-desc','d-notas'].forEach(id => document.getElementById(id).value = '');
+    ['d-acreedor','d-desc','d-notas','d-vencimiento','d-valor-cuota','d-fecha-cuota'].forEach(
+      x => document.getElementById(x).value = ''
+    );
     document.getElementById('d-monto').value = '';
     document.getElementById('d-pagado').value = '0';
-    document.getElementById('d-vencimiento').value = '';
     document.getElementById('d-recordatorio').value = '3';
+    document.getElementById('d-tiene-cuotas').checked = false;
   }
+  toggleCuotasFields();
   document.getElementById('debt-modal').classList.add('show');
 }
 
@@ -1585,36 +1647,87 @@ function closeDebtModal() {
 }
 
 function saveDebt() {
-  const acreedor = document.getElementById('d-acreedor').value.trim();
-  const monto = parseFloat(document.getElementById('d-monto').value);
-  const pagado = parseFloat(document.getElementById('d-pagado').value) || 0;
-  const vencimiento = document.getElementById('d-vencimiento').value;
-  const recordatorio = parseInt(document.getElementById('d-recordatorio').value);
-  const desc = document.getElementById('d-desc').value.trim();
-  const notas = document.getElementById('d-notas').value.trim();
-  const editId = document.getElementById('d-edit-id').value;
+  const acreedor        = document.getElementById('d-acreedor').value.trim();
+  const monto           = parseFloat(document.getElementById('d-monto').value);
+  const pagado          = parseFloat(document.getElementById('d-pagado').value) || 0;
+  const vencimiento     = document.getElementById('d-vencimiento').value;
+  const recordatorio    = parseInt(document.getElementById('d-recordatorio').value);
+  const desc            = document.getElementById('d-desc').value.trim();
+  const notas           = document.getElementById('d-notas').value.trim();
+  const tiene_cuotas    = document.getElementById('d-tiene-cuotas').checked;
+  const valor_cuota     = parseFloat(document.getElementById('d-valor-cuota').value) || 0;
+  const fecha_proxima_cuota = document.getElementById('d-fecha-cuota').value;
+  const editId          = document.getElementById('d-edit-id').value;
 
   if (!acreedor) return iosAlert('Ingresa el nombre del acreedor');
   if (!monto || monto <= 0) return iosAlert('Ingresa un monto válido');
-  if (!vencimiento) return iosAlert('Selecciona la fecha de vencimiento');
+  if (tiene_cuotas && !fecha_proxima_cuota) return iosAlert('Ingresa la fecha de la próxima cuota');
 
   const estado = pagado >= monto ? 'pagada' : 'pendiente';
+  const campos = { acreedor, monto, pagado, vencimiento, recordatorio, desc, notas, estado, tiene_cuotas, valor_cuota, fecha_proxima_cuota };
 
   let deuda;
   if (editId) {
     const idx = data.deudas.findIndex(d => d.id === editId);
-    data.deudas[idx] = { ...data.deudas[idx], acreedor, monto, pagado, vencimiento, recordatorio, desc, notas, estado };
+    data.deudas[idx] = { ...data.deudas[idx], ...campos };
     deuda = data.deudas[idx];
   } else {
-    deuda = { id: uid(), acreedor, monto, pagado, vencimiento, recordatorio, desc, notas, estado, creada: today() };
+    deuda = { id: uid(), ...campos, creada: today() };
     data.deudas.unshift(deuda);
   }
 
   saveData(data);
   dbSaveDebt(deuda);
   closeDebtModal();
+  // Actualizar categorías en los selects
+  fillCatOptions('quick-cat', document.getElementById('quick-tipo').value);
+  fillCatOptions('mov-cat', document.getElementById('mov-tipo').value);
   renderDeudas();
   checkReminders();
+}
+
+// Descontar pago de cuota de la deuda y avanzar fecha
+function applyDebtPayment(cat, monto) {
+  const nombre = debtNameFromCat(cat);
+  const d = data.deudas.find(x => x.acreedor === nombre && x.estado !== 'pagada');
+  if (!d) return;
+  d.pagado = Math.min(d.monto, (d.pagado || 0) + monto);
+  if (d.pagado >= d.monto) d.estado = 'pagada';
+  // Avanzar fecha próxima cuota 1 mes
+  if (d.fecha_proxima_cuota) {
+    const next = new Date(d.fecha_proxima_cuota + 'T00:00:00');
+    next.setMonth(next.getMonth() + 1);
+    d.fecha_proxima_cuota = next.toISOString().split('T')[0];
+  }
+  dbSaveDebt(d);
+  showToast(`✅ Cuota aplicada a "${d.acreedor}"`);
+}
+
+// Editar cuota desde tarjeta de deuda
+function openEditCuota(id) {
+  const d = data.deudas.find(x => x.id === id);
+  if (!d) return;
+  document.getElementById('edit-cuota-debt-id').value   = id;
+  document.getElementById('edit-cuota-debt-name').textContent = `${d.acreedor} — Pendiente: ${fmt(d.monto - d.pagado)}`;
+  document.getElementById('edit-cuota-valor').value     = d.valor_cuota || '';
+  document.getElementById('edit-cuota-fecha').value     = d.fecha_proxima_cuota || '';
+  document.getElementById('edit-cuota-modal').classList.add('show');
+}
+
+function saveEditCuota() {
+  const id    = document.getElementById('edit-cuota-debt-id').value;
+  const valor = parseFloat(document.getElementById('edit-cuota-valor').value) || 0;
+  const fecha = document.getElementById('edit-cuota-fecha').value;
+  if (!fecha) return iosAlert('Ingresa la fecha de la próxima cuota');
+  const d = data.deudas.find(x => x.id === id);
+  if (!d) return;
+  d.valor_cuota = valor;
+  d.fecha_proxima_cuota = fecha;
+  saveData(data);
+  dbSaveDebt(d);
+  document.getElementById('edit-cuota-modal').classList.remove('show');
+  renderDeudas();
+  showToast('✅ Cuota actualizada');
 }
 
 function deleteDebt(id) {
@@ -1736,15 +1849,34 @@ function renderDeudas() {
         <div class="progress-fill" style="width:${pct}%; background:${d.estado === 'pagada' ? 'var(--green)' : 'var(--accent)'}"></div>
       </div>
       <div class="debt-card-meta">${pct}% pagado</div>
-      ${d.vencimiento ? `<div class="debt-card-meta" style="margin-top:0.25rem;">📅 Vence: ${formatDate(d.vencimiento)} · 🔔 Recordatorio: ${d.recordatorio} día(s) antes</div>` : ''}
+
+      ${d.tiene_cuotas ? `
+        <div style="background:var(--surface2);border-radius:8px;padding:0.6rem 0.75rem;margin-top:0.5rem;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <div>
+              <div style="font-size:0.78rem;color:var(--muted);">Próxima cuota</div>
+              <div style="font-weight:600;color:var(--accent2);">${fmt(d.valor_cuota)}</div>
+            </div>
+            <div style="text-align:right;">
+              <div style="font-size:0.78rem;color:var(--muted);">Fecha</div>
+              <div style="font-weight:600;${d.fecha_proxima_cuota && diffDays(d.fecha_proxima_cuota) <= 7 ? 'color:var(--yellow)' : ''}">${formatDate(d.fecha_proxima_cuota)}</div>
+            </div>
+          </div>
+        </div>` : ''}
+
+      ${d.vencimiento ? `<div class="debt-card-meta" style="margin-top:0.4rem;">📅 Vencimiento: ${formatDate(d.vencimiento)} · 🔔 ${d.recordatorio} día(s) antes</div>` : ''}
       ${d.notas ? `<div class="debt-card-meta" style="margin-top:0.25rem;">📝 ${d.notas}</div>` : ''}
+
       <div class="debt-card-actions" style="flex-wrap:wrap;">
         ${d.estado !== 'pagada' ? `
-          <button class="btn btn-green btn-sm" onclick="openPayModal('${d.id}')">Pagar</button>
+          <button class="btn btn-green btn-sm" onclick="openPayModal('${d.id}')">💵 Pagar</button>
           <button class="btn btn-ghost btn-sm" onclick="markPaid('${d.id}')">✓ Pagada</button>
         ` : ''}
+        ${d.tiene_cuotas && d.estado !== 'pagada' ? `
+          <button class="btn btn-ghost btn-sm" onclick="openEditCuota('${d.id}')">✏️ Cuota</button>
+        ` : ''}
         ${d.vencimiento && d.estado !== 'pagada' ? `
-          <button class="btn btn-ghost btn-sm" onclick="exportToCalendar('${d.id}')" title="Agregar recordatorio al Calendario de iPhone">📅 Calendario</button>
+          <button class="btn btn-ghost btn-sm" onclick="exportToCalendar('${d.id}')">📅 Calendario</button>
         ` : ''}
         <button class="btn btn-ghost btn-sm" onclick="openDebtModal('${d.id}')">Editar</button>
         <button class="btn btn-red btn-sm" onclick="deleteDebt('${d.id}')">🗑</button>
@@ -1804,6 +1936,9 @@ function init() {
   });
   document.getElementById('pay-modal').addEventListener('click', e => {
     if (e.target === e.currentTarget) closePayModal();
+  });
+  document.getElementById('edit-cuota-modal').addEventListener('click', e => {
+    if (e.target === e.currentTarget) document.getElementById('edit-cuota-modal').classList.remove('show');
   });
 
   checkReminders();
