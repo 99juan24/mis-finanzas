@@ -1370,8 +1370,9 @@ async function dbAddMovimiento(m) {
 }
 
 async function dbDeleteMovimiento(id) {
-  if (!currentUser) return;
-  await sb.from('movimientos').delete().eq('id', id);
+  const user = currentUser || (await sb.auth.getUser()).data?.user;
+  if (!user) return;
+  await sb.from('movimientos').delete().eq('id', id).eq('user_id', user.id);
 }
 
 async function dbSaveDebt(d) {
@@ -1387,8 +1388,9 @@ async function dbSaveDebt(d) {
 }
 
 async function dbDeleteDebt(id) {
-  if (!currentUser) return;
-  await sb.from('deudas').delete().eq('id', id);
+  const user = currentUser || (await sb.auth.getUser()).data?.user;
+  if (!user) return;
+  await sb.from('deudas').delete().eq('id', id).eq('user_id', user.id);
 }
 
 let data = loadData();
