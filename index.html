@@ -1097,12 +1097,14 @@ async function forgotPassword() {
   else showAuthSuccess('📧 Te enviamos un link para restablecer tu contraseña');
 }
 
-async function logOut() {
-  try { await sb.auth.signOut(); } catch(e) {}
+function logOut() {
+  // Borrar sesión de Supabase directo del localStorage (sin esperar al servidor)
+  localStorage.removeItem('sb-mqkjtqocyrizxffguoqr-auth-token');
   localStorage.removeItem('fin_mov');
   localStorage.removeItem('fin_deu');
-  localStorage.removeItem('fin_ntfy');
   localStorage.removeItem('fin_ntfy_last');
+  // Disparar signOut en segundo plano (no esperamos respuesta)
+  sb.auth.signOut().catch(() => {});
   window.location.reload();
 }
 
