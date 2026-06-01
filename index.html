@@ -1009,9 +1009,10 @@ function removeFaceID() {
 
 // ── Auth UI ──────────────────────────────────────────────────────
 function showAuthScreen(show) {
-  const el = document.getElementById('auth-screen');
-  el.style.display = show ? 'flex' : 'none';
-  document.getElementById('logout-btn').style.display = show ? 'none' : '';
+  const authEl   = document.getElementById('auth-screen');
+  const logoutEl = document.getElementById('logout-btn');
+  if (authEl)   authEl.style.display   = show ? 'flex' : 'none';
+  if (logoutEl) logoutEl.style.display = show ? 'none' : '';
 }
 
 function switchAuthTab(tab) {
@@ -1097,19 +1098,18 @@ async function forgotPassword() {
 }
 
 async function logOut() {
-  // Limpiar datos locales primero
+  // 1. Cerrar sesión en Supabase
+  try { await sb.auth.signOut(); } catch(e) {}
+  // 2. Limpiar estado local (sin esperar evento)
+  try { sb.removeAllChannels(); } catch(e) {}
   data = { movimientos: [], deudas: [] };
   localStorage.removeItem('fin_mov');
   localStorage.removeItem('fin_deu');
   currentUser = null;
-  // Desuscribir realtime
-  sb.removeAllChannels();
-  // Cerrar sesión en Supabase (onAuthStateChange se encarga de mostrar login)
-  try { await sb.auth.signOut(); } catch(e) {
-    // Si falla, forzar pantalla de login igualmente
-    showAuthScreen(true);
-    checkFaceIDOnLoad();
-  }
+  // 3. Forzar pantalla de login directamente
+  showAuthScreen(true);
+  checkFaceIDOnLoad();
+  showToast('Sesión cerrada');
 }
 
 // ── Funciones Face ID UI ─────────────────────────────────────────
