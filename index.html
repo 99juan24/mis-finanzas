@@ -793,7 +793,7 @@
     <div class="form-card" style="border-color:#ef444433;">
       <h3 style="color:var(--red);">👤 Cuenta</h3>
       <p id="settings-user-email" style="color:var(--muted);font-size:0.875rem;margin-bottom:1rem;"></p>
-      <button class="btn btn-red" onclick="logOut()" style="width:100%;min-height:48px;font-size:1rem;">
+      <button class="btn btn-red" onclick="this.textContent='Cerrando...';this.disabled=true;logOut();" style="width:100%;min-height:48px;font-size:1rem;">
         🚪 Cerrar sesión
       </button>
     </div>
@@ -1098,18 +1098,12 @@ async function forgotPassword() {
 }
 
 async function logOut() {
-  // 1. Cerrar sesión en Supabase
   try { await sb.auth.signOut(); } catch(e) {}
-  // 2. Limpiar estado local (sin esperar evento)
-  try { sb.removeAllChannels(); } catch(e) {}
-  data = { movimientos: [], deudas: [] };
   localStorage.removeItem('fin_mov');
   localStorage.removeItem('fin_deu');
-  currentUser = null;
-  // 3. Forzar pantalla de login directamente
-  showAuthScreen(true);
-  checkFaceIDOnLoad();
-  showToast('Sesión cerrada');
+  localStorage.removeItem('fin_ntfy');
+  localStorage.removeItem('fin_ntfy_last');
+  window.location.reload();
 }
 
 // ── Funciones Face ID UI ─────────────────────────────────────────
