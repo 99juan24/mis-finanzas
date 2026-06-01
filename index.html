@@ -1096,16 +1096,20 @@ async function forgotPassword() {
   else showAuthSuccess('📧 Te enviamos un link para restablecer tu contraseña');
 }
 
-function logOut() {
-  iosConfirm('¿Cerrar sesión?', async () => {
-    try { await sb.auth.signOut(); } catch(e) {}
-    data = { movimientos: [], deudas: [] };
-    localStorage.removeItem('fin_mov');
-    localStorage.removeItem('fin_deu');
-    currentUser = null;
+async function logOut() {
+  // Limpiar datos locales primero
+  data = { movimientos: [], deudas: [] };
+  localStorage.removeItem('fin_mov');
+  localStorage.removeItem('fin_deu');
+  currentUser = null;
+  // Desuscribir realtime
+  sb.removeAllChannels();
+  // Cerrar sesión en Supabase (onAuthStateChange se encarga de mostrar login)
+  try { await sb.auth.signOut(); } catch(e) {
+    // Si falla, forzar pantalla de login igualmente
     showAuthScreen(true);
     checkFaceIDOnLoad();
-  }, 'Cerrar sesión', false);
+  }
 }
 
 // ── Funciones Face ID UI ─────────────────────────────────────────
@@ -1175,6 +1179,30 @@ async function checkFaceIDOnLoad() {
   if (wrap) wrap.style.display = (enrolled && available) ? '' : 'none';
 }
 
+// ── Realtime: sincronización entre dispositivos ───────────────────
+function setupRealtime(userId) {
+  sb.removeAllChannels(); // evitar duplicados
+  sb.channel('user-data-' + userId)
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'movimientos',
+      filter: `user_id=eq.${userId}`
+    }, async () => {
+      await loadFromSupabase();
+      renderResumen();
+      if (document.getElementById('page-movimientos').classList.contains('active')) renderMovimientos();
+    })
+    .on('postgres_changes', {
+      event: '*', schema: 'public', table: 'deudas',
+      filter: `user_id=eq.${userId}`
+    }, async () => {
+      await loadFromSupabase();
+      renderResumen();
+      if (document.getElementById('page-deudas').classList.contains('active')) renderDeudas();
+      checkReminders();
+    })
+    .subscribe();
+}
+
 // ── Cargar datos desde Supabase ──────────────────────────────────
 async function loadFromSupabase() {
   try {
@@ -1203,6 +1231,7 @@ sb.auth.onAuthStateChange(async (event, session) => {
     updateFaceIDSettings();
     const emailEl = document.getElementById('settings-user-email');
     if (emailEl) emailEl.textContent = `Sesión iniciada como: ${session.user.email}`;
+    setupRealtime(session.user.id);
     await loadFromSupabase();
     renderResumen();
     checkReminders();
