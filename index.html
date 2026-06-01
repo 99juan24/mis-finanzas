@@ -789,6 +789,15 @@
       </div>
     </div>
 
+    <!-- Debug panel -->
+    <div class="form-card" id="debug-card">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.75rem;">
+        <h3 style="color:var(--muted);">🐛 Debug Log</h3>
+        <button class="btn btn-ghost btn-sm" onclick="document.getElementById('debug-log').innerHTML='';document.getElementById('debug-log').parentElement.parentElement.style.display='none'">Cerrar</button>
+      </div>
+      <div id="debug-log" style="background:#0a0f1a;border-radius:8px;padding:0.75rem;max-height:200px;overflow-y:auto;font-family:monospace;"></div>
+    </div>
+
     <!-- Cerrar sesión -->
     <div class="form-card" style="border-color:#ef444433;">
       <h3 style="color:var(--red);">👤 Cuenta</h3>
@@ -948,6 +957,37 @@
 </div>
 
 <script>
+// ==================== DEBUG PANEL ====================
+(function() {
+  const logs = [];
+  function addLog(type, args) {
+    const msg = Array.from(args).map(a => {
+      try { return typeof a === 'object' ? JSON.stringify(a) : String(a); }
+      catch(e) { return '[object]'; }
+    }).join(' ');
+    logs.push({ type, msg, time: new Date().toLocaleTimeString() });
+    const panel = document.getElementById('debug-log');
+    if (panel) {
+      panel.innerHTML = logs.slice(-30).reverse().map(l =>
+        `<div style="color:${l.type==='error'?'#f87171':l.type==='warn'?'#fbbf24':'#94a3b8'};font-size:0.72rem;border-bottom:1px solid #1e293b;padding:0.2rem 0;">
+          <span style="color:#475569;">${l.time}</span> ${l.msg}
+        </div>`
+      ).join('');
+    }
+  }
+  const _log   = console.log.bind(console);
+  const _error = console.error.bind(console);
+  const _warn  = console.warn.bind(console);
+  console.log   = function() { _log(...arguments);   addLog('log',   arguments); };
+  console.error = function() { _error(...arguments); addLog('error', arguments); };
+  console.warn  = function() { _warn(...arguments);  addLog('warn',  arguments); };
+  window.onerror = function(msg, src, line, col, err) {
+    addLog('error', [`JS ERROR: ${msg} (línea ${line})`]);
+  };
+  window.onunhandledrejection = function(e) {
+    addLog('error', [`Promise error: ${e.reason}`]);
+  };
+})();
 // ==================== SUPABASE ====================
 const SUPA_URL = 'https://mqkjtqocyrizxffguoqr.supabase.co';
 const SUPA_KEY = 'sb_publishable_X4ZV_C3HTqBO1rTqujJ52w_XyVJA4PD';
@@ -1098,14 +1138,20 @@ async function forgotPassword() {
 }
 
 function logOut() {
-  // Borrar sesión de Supabase directo del localStorage (sin esperar al servidor)
-  localStorage.removeItem('sb-mqkjtqocyrizxffguoqr-auth-token');
-  localStorage.removeItem('fin_mov');
-  localStorage.removeItem('fin_deu');
-  localStorage.removeItem('fin_ntfy_last');
-  // Disparar signOut en segundo plano (no esperamos respuesta)
-  sb.auth.signOut().catch(() => {});
-  window.location.reload();
+  console.log('logOut() llamado');
+  try {
+    console.log('Borrando localStorage...');
+    localStorage.removeItem('sb-mqkjtqocyrizxffguoqr-auth-token');
+    localStorage.removeItem('fin_mov');
+    localStorage.removeItem('fin_deu');
+    localStorage.removeItem('fin_ntfy_last');
+    console.log('localStorage borrado OK');
+    sb.auth.signOut().catch(e => console.error('signOut error:', e));
+    console.log('Recargando...');
+    window.location.reload();
+  } catch(e) {
+    console.error('Error en logOut:', e);
+  }
 }
 
 // ── Funciones Face ID UI ─────────────────────────────────────────
