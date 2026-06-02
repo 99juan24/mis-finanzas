@@ -1798,6 +1798,60 @@ function confirmPay() {
   renderResumen();
 }
 
+function cuotaHTML(d) {
+  if (!d.tiene_cuotas || !d.fecha_proxima_cuota || d.estado === 'pagada') return '';
+
+  const daysNext    = diffDays(d.fecha_proxima_cuota);
+  const cuotaPagada = daysNext > 0; // próxima en futuro → esta cuota ya pagada
+
+  // Fecha de la cuota que se pagó = 1 mes antes de la próxima
+  const nextD = new Date(d.fecha_proxima_cuota + 'T00:00:00');
+  const lastD = new Date(nextD);
+  lastD.setMonth(lastD.getMonth() - 1);
+  const lastPaidStr = lastD.toISOString().split('T')[0];
+
+  if (cuotaPagada) {
+    const nextColor = daysNext <= 7 ? 'var(--yellow)' : 'var(--green)';
+    return `
+      <div style="background:var(--surface2);border-radius:8px;padding:0.6rem 0.75rem;margin-top:0.5rem;">
+        <div style="display:flex;align-items:center;gap:0.5rem;margin-bottom:0.5rem;">
+          <span style="font-size:1.1rem;">✅</span>
+          <span style="font-size:0.82rem;color:var(--green);font-weight:600;">Cuota del ${formatDate(lastPaidStr)} — pagada</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--border);padding-top:0.4rem;">
+          <div>
+            <div style="font-size:0.72rem;color:var(--muted);">Próxima cuota</div>
+            <div style="font-weight:700;color:var(--accent2);">${fmt(d.valor_cuota)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.72rem;color:var(--muted);">en ${daysNext} día${daysNext!==1?'s':''}</div>
+            <div style="font-weight:600;color:${nextColor};">${formatDate(d.fecha_proxima_cuota)}</div>
+          </div>
+        </div>
+      </div>`;
+  } else {
+    const overdue  = daysNext < 0;
+    const clr      = overdue ? 'var(--red)' : daysNext <= 3 ? 'var(--yellow)' : 'var(--accent2)';
+    const lbl      = overdue
+      ? `⚠️ Venció hace ${Math.abs(daysNext)} día${Math.abs(daysNext)!==1?'s':''}`
+      : daysNext === 0 ? '🚨 Vence HOY'
+      : `📅 Vence en ${daysNext} día${daysNext!==1?'s':''}`;
+    return `
+      <div style="background:var(--surface2);border-radius:8px;padding:0.6rem 0.75rem;margin-top:0.5rem;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div>
+            <div style="font-size:0.72rem;color:var(--muted);">Cuota pendiente</div>
+            <div style="font-weight:700;color:${clr};">${fmt(d.valor_cuota)}</div>
+          </div>
+          <div style="text-align:right;">
+            <div style="font-size:0.72rem;color:${clr};">${lbl}</div>
+            <div style="font-weight:600;color:${clr};">${formatDate(d.fecha_proxima_cuota)}</div>
+          </div>
+        </div>
+      </div>`;
+  }
+}
+
 function renderDeudas() {
   const filterEstado = document.getElementById('filter-debt-estado').value;
 
@@ -1870,19 +1924,7 @@ function renderDeudas() {
       </div>
       <div class="debt-card-meta">${pct}% pagado</div>
 
-      ${d.tiene_cuotas ? `
-        <div style="background:var(--surface2);border-radius:8px;padding:0.6rem 0.75rem;margin-top:0.5rem;">
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <div>
-              <div style="font-size:0.78rem;color:var(--muted);">Próxima cuota</div>
-              <div style="font-weight:600;color:var(--accent2);">${fmt(d.valor_cuota)}</div>
-            </div>
-            <div style="text-align:right;">
-              <div style="font-size:0.78rem;color:var(--muted);">Fecha</div>
-              <div style="font-weight:600;${d.fecha_proxima_cuota && diffDays(d.fecha_proxima_cuota) <= 7 ? 'color:var(--yellow)' : ''}">${formatDate(d.fecha_proxima_cuota)}</div>
-            </div>
-          </div>
-        </div>` : ''}
+      ${cuotaHTML(d)}
 
       ${d.vencimiento ? `<div class="debt-card-meta" style="margin-top:0.4rem;">📅 Vencimiento: ${formatDate(d.vencimiento)} · 🔔 ${d.recordatorio} día(s) antes</div>` : ''}
       ${d.notas ? `<div class="debt-card-meta" style="margin-top:0.25rem;">📝 ${d.notas}</div>` : ''}
