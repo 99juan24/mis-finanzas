@@ -1309,19 +1309,24 @@ async function loadFromSupabase() {
 // ── Escuchar cambios de sesión ───────────────────────────────────
 sb.auth.onAuthStateChange(async (event, session) => {
   if (session?.user) {
+    // Siempre actualizar currentUser (cubre refresco de token también)
     currentUser = session.user;
-    const nombre = session.user.user_metadata?.nombre || session.user.email;
-    document.getElementById('header-user').textContent = nombre;
-    showAuthScreen(false);
-    updateFaceIDSettings();
-    const emailEl = document.getElementById('settings-user-email');
-    if (emailEl) emailEl.textContent = `Sesión iniciada como: ${session.user.email}`;
-    setupRealtime(session.user.id);
-    await loadFromSupabase();
-    renderResumen();
-    checkReminders();
-    if (Notification.permission === 'granted') setTimeout(syncDeudas, 1500);
-    if (getNtfyTopic()) setTimeout(sendNtfyReminders, 2000);
+
+    // Solo inicializar UI completa en login inicial, no en cada refresco de token
+    if (event === 'SIGNED_IN' || event === 'INITIAL_SESSION') {
+      const nombre = session.user.user_metadata?.nombre || session.user.email;
+      document.getElementById('header-user').textContent = nombre;
+      showAuthScreen(false);
+      updateFaceIDSettings();
+      const emailEl = document.getElementById('settings-user-email');
+      if (emailEl) emailEl.textContent = `Sesión iniciada como: ${session.user.email}`;
+      setupRealtime(session.user.id);
+      await loadFromSupabase();
+      renderResumen();
+      checkReminders();
+      if (Notification.permission === 'granted') setTimeout(syncDeudas, 1500);
+      if (getNtfyTopic()) setTimeout(sendNtfyReminders, 2000);
+    }
   } else {
     showAuthScreen(true);
     checkFaceIDOnLoad();
@@ -1452,10 +1457,10 @@ function updateQuickCat() {
 }
 
 // ==================== MOVIMIENTOS ====================
-function addMovimiento() {
+async function addMovimiento() {
   const tipo = document.getElementById('quick-tipo').value;
   const monto = parseFloat(document.getElementById('quick-monto').value);
-  const desc = document.getElementById('quick-desc').value.trim(); // mapped to 'descripcion' in DB
+  const desc = document.getElementById('quick-desc').value.trim();
   const cat = document.getElementById('quick-cat').value;
   const fecha = document.getElementById('quick-fecha').value || today();
 
@@ -1466,14 +1471,14 @@ function addMovimiento() {
   data.movimientos.unshift(m);
   if (tipo === 'gasto' && isDebtCat(cat)) applyDebtPayment(cat, monto);
   saveData(data);
-  dbAddMovimiento(m);
   document.getElementById('quick-monto').value = '';
   document.getElementById('quick-desc').value = '';
   document.getElementById('quick-fecha').value = '';
   renderResumen();
+  await dbAddMovimiento(m);
 }
 
-function addMovimientoFull() {
+async function addMovimientoFull() {
   const tipo = document.getElementById('mov-tipo').value;
   const monto = parseFloat(document.getElementById('mov-monto').value);
   const desc = document.getElementById('mov-desc').value.trim();
@@ -1488,7 +1493,7 @@ function addMovimientoFull() {
   data.movimientos.unshift(mv);
   if (tipo === 'gasto' && isDebtCat(cat)) applyDebtPayment(cat, monto);
   saveData(data);
-  dbAddMovimiento(mv);
+  await dbAddMovimiento(mv);
   document.getElementById('mov-monto').value = '';
   document.getElementById('mov-desc').value = '';
   document.getElementById('mov-fecha').value = '';
